@@ -1,0 +1,74 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'bundler/setup'
+require_relative '../lib/sap_commerce_mcp'
+
+# Get project path from command line
+project_path = ARGV[0] || Dir.pwd
+project_path = File.expand_path(project_path)
+
+warn "Starting SAP Commerce MCP Server..."
+warn "Project: #{project_path}"
+
+# Ensure data directories exist
+SapCommerceMcp.ensure_data_dir!
+
+# Initialize indexer and audit logger
+indexer = SapCommerceMcp::Indexer.new(project_path)
+audit_logger = SapCommerceMcp::Audit::Logger.new(project_path)
+
+# Build index if it doesn't exist
+unless indexer.index_exists?
+  warn "No index found. Building initial index..."
+  stats = indexer.build_index
+  audit_logger.log_indexing(stats)
+  warn "Index built: #{stats[:classes_count]} classes, #{stats[:methods_count]} methods"
+else
+  # Ensure database is opened for existing index
+  indexer.ensure_db_open
+  warn "Using existing index (last indexed: #{indexer.last_indexed_time&.strftime('%Y-%m-%d %H:%M:%S')})"
+end
+
+warn "Index location: #{indexer.db_path}"
+warn "Audit logs: #{audit_logger.log_path}"
+
+# Configure server context that will be passed to all tools
+server_context = {
+  indexer: indexer,
+  audit_logger: audit_logger,
+  project_path: project_path
+}
+
+# Tool classes (not instances) - the SDK will call class methods
+tools = [
+  SapCommerceMcp::Tools::SearchClasses,
+  SapCommerceMcp::Tools::GetClassSignature,
+  SapCommerceMcp::Tools::FindImplementations,
+  SapCommerceMcp::Tools::FindUsages,
+  SapCommerceMcp::Tools::SearchAnnotations,
+  SapCommerceMcp::Tools::GetSpringBeans,
+  SapCommerceMcp::Tools::RebuildIndex,
+  SapCommerceMcp::Tools::GetIndexStats
+]
+
+# Create MCP server with official SDK
+server = MCP::Server.new(
+  name: 'sap-commerce-mcp',
+  version: '0.1.0',
+  tools: tools,
+  server_context: server_context
+)
+
+warn "Registered #{server.tools.size} tools"
+warn "Ready to receive MCP requests via stdio..."
+
+# Connect using stdio transport (for Claude Code)
+transport = MCP::Server::Transports::StdioTransport.new(server)
+transport.open
+
+# Cleanup on exit
+at_exit do
+  indexer.close
+  audit_logger.log_indexing({ event: 'server_stop' })
+end
