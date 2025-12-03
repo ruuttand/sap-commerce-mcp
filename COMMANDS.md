@@ -39,6 +39,12 @@ claude mcp add sap-commerce --scope user -- /FULL/PATH/TO/sap-commerce-mcp/bin/s
 "Where is ProductModel used?"
 "What files import CartService?"
 
+# Dependency analysis (NEW - field injection)
+"What services does DefaultCheckoutFacade depend on?"
+"What classes inject CheckoutService?"
+"Show me dependencies of DefaultCartFacade"
+"Find all classes that use ProductService via @Autowired"
+
 # Spring beans
 "Find Spring beans for cart"
 "Show me all *Service beans"

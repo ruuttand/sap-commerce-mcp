@@ -23,9 +23,9 @@ See **[SETUP_GUIDE.md](SETUP_GUIDE.md)** for complete instructions.
 ## ✨ Features
 
 - ⚡ **60-80% Token Reduction** - Find code without loading files
-- 🔍 **8 Search Tools** - Classes, methods, annotations, Spring beans
+- 🔍 **9 Search Tools** - Classes, methods, field injection, annotations, Spring beans
 - 📊 **Complete Audit Trail** - Every operation logged
-- 🏗️ **SAP Commerce-Aware** - ItemModels, extensions, hybris patterns
+- 🏗️ **SAP Commerce-Aware** - ItemModels, extensions, hybris patterns, @Autowired tracking
 - 🛠️ **Official SDK** - Built with Anthropic/Shopify Ruby SDK
 - 💾 **SQLite Index** - Fast queries (< 100ms)
 
@@ -45,6 +45,20 @@ See **[SETUP_GUIDE.md](SETUP_GUIDE.md)** for complete instructions.
 → 75% token savings vs traditional approach
 ```
 
+### Dependency Analysis (NEW!)
+```
+"What services does DefaultCheckoutFacade depend on?"
+→ find_injected_dependencies shows @Autowired fields
+→ Understand runtime dependencies instantly
+```
+
+### Impact Analysis
+```
+"What depends on CheckoutService?"
+→ Shows all classes injecting CheckoutService
+→ Plan refactoring with confidence
+```
+
 ### PR Review
 ```
 "Review this PR for new PaymentValidationService"
@@ -58,10 +72,11 @@ See **[SETUP_GUIDE.md](SETUP_GUIDE.md)** for complete instructions.
 2. **get_class_signature** - Get methods without loading file
 3. **find_implementations** - Find all implementers
 4. **find_usages** - Find where class is used
-5. **search_annotations** - Find annotated code
-6. **get_spring_beans** - Search Spring beans
-7. **rebuild_index** - Rebuild index
-8. **get_index_stats** - Show statistics
+5. **find_injected_dependencies** - **NEW!** Analyze @Autowired/@Resource field injection
+6. **search_annotations** - Find annotated code
+7. **get_spring_beans** - Search Spring beans
+8. **rebuild_index** - Rebuild index
+9. **get_index_stats** - Show statistics
 
 ## 📊 Performance
 
@@ -119,7 +134,7 @@ Example log:
 ┌────────▼────────────────┐
 │   MCP Server (Ruby SDK) │
 │  ┌──────────────────┐   │
-│  │  8 MCP Tools     │   │
+│  │  9 MCP Tools     │   │
 │  └────────┬─────────┘   │
 │  ┌────────▼─────────┐   │
 │  │  SQLite Index    │   │
@@ -137,7 +152,9 @@ Example log:
 ## 📚 Documentation
 
 - **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Complete setup instructions
-- **[ARCHITECTURE.md](../sap-commerce-mcp-plan.md)** - Original design plan
+- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick reference card
+- **[COMMANDS.md](COMMANDS.md)** - Command cheatsheet
+- **[CLAUDE.md](CLAUDE.md)** - Architecture and implementation details (for Claude Code)
 
 ## 🤝 Contributing
 
