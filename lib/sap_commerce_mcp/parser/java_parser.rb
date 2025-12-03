@@ -8,7 +8,7 @@ module SapCommerceMcp
       
       def parse_file(file_path)
         content = File.read(file_path)
-        
+
         {
           package: extract_package(content),
           imports: extract_imports(content),
@@ -19,13 +19,14 @@ module SapCommerceMcp
         }
       rescue => e
         warn "Error parsing #{file_path}: #{e.message}"
+        warn e.backtrace.first(5).join("\n")
         nil
       end
 
       private
 
       def extract_package(content)
-        if match = content.match(/^\s*package\s+([\w.]+);/m)
+        if (match = content.match(/^\s*package\s+([\w.]+);/m))
           match[1]
         end
       end
@@ -100,7 +101,6 @@ module SapCommerceMcp
           return_type = match[1]&.strip
           name = match[2]
           params = match[3]&.strip || ''
-          throws = match[4]&.strip
 
           # Extract annotations before this method
           last_match = Regexp.last_match
@@ -158,26 +158,63 @@ module SapCommerceMcp
 
       def extract_fields(content)
         fields = []
-        
-        # Match field declarations
-        pattern = /
-          (?:@[\w.]+(?:\([^)]*\))?[\s\n]*)*  # Annotations
-          ((?:public|protected|private|static|final|transient|volatile)\s+)*  # Modifiers
-          ([\w.<>\[\],\s]+)\s+  # Type
-          (\w+)  # Name
-          (?:\s*=\s*[^;]+)?  # Optional initializer
-          ;
+
+        # Match field declarations: modifiers + type + name + semicolon
+        # This regex matches fields but not methods (no parentheses before semicolon)
+        # Pattern: optional modifiers, type, field name, optional initializer, semicolon
+        field_pattern = /
+          ^\s*                                                    # Start of line
+          ((?:(?:public|protected|private|static|final|transient|volatile)\s+)*)  # Modifiers (optional, all of them)
+          ([\w.<>\[\]]+)                                          # Type
+          \s+                                                     # Whitespace
+          (\w+)                                                   # Field name
+          (?:\s*=\s*[^;]+)?                                       # Optional initializer
+          \s*;                                                    # Semicolon
         /mx
 
-        content.scan(pattern) do |match|
-          modifiers = match[0]&.strip&.split(/\s+/) || []
-          type = match[1]&.strip
+        # Split content into lines for annotation extraction
+        lines = content.lines
+
+        # Scan through content to find field declarations
+        content.scan(field_pattern) do |match|
+          modifiers_str = match[0]
+          type = match[1]
           name = match[2]
+
+          # Get the position of this match in the original content
+          match_pos = Regexp.last_match.begin(0)
+
+          # Count which line this match is on
+          line_idx = content[0...match_pos].count("\n")
+
+          # Look backward through previous lines to find annotations
+          annotations = []
+          check_line = line_idx - 1
+
+          while check_line >= 0
+            line = lines[check_line].strip
+
+            # Check if this line is an annotation
+            if line =~ /^@([\w.]+)(?:\(([^)]*)\))?$/
+              annotations.unshift({
+                name: $1,
+                value: $2
+              })
+              check_line -= 1
+            elsif line.empty?
+              # Skip blank lines
+              check_line -= 1
+            else
+              # Stop at non-annotation, non-blank line
+              break
+            end
+          end
 
           fields << {
             name: name,
             type: type,
-            modifiers: modifiers
+            modifiers: modifiers_str ? modifiers_str.strip.split(/\s+/) : [],
+            annotations: annotations
           }
         end
 
@@ -188,7 +225,7 @@ module SapCommerceMcp
         annotations = []
         
         # Find annotations before class declaration
-        if match = content.match(/((?:@[\w.]+(?:\([^)]*\))?[\s\n]*)+)(?:public|protected|private|abstract|final|static)*\s*(?:class|interface|enum)/m)
+        if (match = content.match(/((?:@[\w.]+(?:\([^)]*\))?[\s\n]*)+)(?:public|protected|private|abstract|final|static)*\s*(?:class|interface|enum)/m))
           annotation_block = match[1]
           annotation_block.scan(/@([\w.]+)(?:\(([^)]*)\))?/) do |ann_match|
             annotations << {

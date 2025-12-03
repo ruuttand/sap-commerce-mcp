@@ -19,15 +19,15 @@ indexer = SapCommerceMcp::Indexer.new(project_path)
 audit_logger = SapCommerceMcp::Audit::Logger.new(project_path)
 
 # Build index if it doesn't exist
-unless indexer.index_exists?
+if indexer.index_exists?
+  # Ensure database is opened for existing index
+  indexer.ensure_db_open
+  warn "Using existing index (last indexed: #{indexer.last_indexed_time&.strftime('%Y-%m-%d %H:%M:%S')})"
+else
   warn "No index found. Building initial index..."
   stats = indexer.build_index
   audit_logger.log_indexing(stats)
   warn "Index built: #{stats[:classes_count]} classes, #{stats[:methods_count]} methods"
-else
-  # Ensure database is opened for existing index
-  indexer.ensure_db_open
-  warn "Using existing index (last indexed: #{indexer.last_indexed_time&.strftime('%Y-%m-%d %H:%M:%S')})"
 end
 
 warn "Index location: #{indexer.db_path}"
@@ -48,6 +48,7 @@ tools = [
   SapCommerceMcp::Tools::FindUsages,
   SapCommerceMcp::Tools::SearchAnnotations,
   SapCommerceMcp::Tools::GetSpringBeans,
+  SapCommerceMcp::Tools::FindInjectedDependencies,
   SapCommerceMcp::Tools::RebuildIndex,
   SapCommerceMcp::Tools::GetIndexStats
 ]

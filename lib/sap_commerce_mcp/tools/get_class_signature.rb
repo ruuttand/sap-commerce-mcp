@@ -4,7 +4,15 @@ module SapCommerceMcp
   module Tools
     class GetClassSignature < MCP::Tool
       title 'Get Class Signature'
-      description 'Get method signatures and structure of a specific class without loading the full file'
+
+      description <<~DESC
+        Get class API overview: methods, fields, annotations WITHOUT full source. Fast structure exploration.
+
+        USE: "Show ProductService methods", "What's in DefaultCheckoutFacade?", "API of CartFacade"
+        NOT: full source→Read | finding class→SearchClasses
+
+        Returns: method signatures, field types, annotations (no method bodies). Use Read for implementation.
+      DESC
 
       input_schema(
         type: 'object',

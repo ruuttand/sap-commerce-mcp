@@ -4,7 +4,15 @@ module SapCommerceMcp
   module Tools
     class FindImplementations < MCP::Tool
       title 'Find Implementations'
-      description 'Find all classes that implement an interface or extend a class'
+
+      description <<~DESC
+        Find classes that EXTEND a class or IMPLEMENT an interface. Traverses inheritance hierarchy.
+
+        USE: "Implementations of CheckoutFacade", "Classes extending AbstractService", "Subclasses of ProductModel"
+        NOT: class name→SearchClasses | imports→FindUsages | injection→FindInjectedDependencies
+
+        Returns: concrete classes that inherit from specified class/interface.
+      DESC
 
       input_schema(
         type: 'object',
