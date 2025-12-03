@@ -4,7 +4,15 @@ module SapCommerceMcp
   module Tools
     class SearchClasses < MCP::Tool
       title 'Search Classes'
-      description 'Search for Java classes in the SAP Commerce project by name or pattern'
+
+      description <<~DESC
+        Find classes by NAME/pattern. Fast indexed lookup with wildcards (* ?).
+
+        USE: "Find ProductService", "Show *Facade", "List *Controller in myext", "Find @Service classes"
+        NOT: imports→FindUsages | injection→FindInjectedDependencies | subclasses→FindImplementations
+
+        Returns: location, type, extension (not source). Use Read/GetClassSignature for content.
+      DESC
 
       input_schema(
         type: 'object',

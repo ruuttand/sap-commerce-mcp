@@ -28,6 +28,7 @@ module SapCommerceMcp
       stats = {
         classes_count: 0,
         methods_count: 0,
+        fields_count: 0,
         annotations_count: 0,
         beans_count: 0,
         files_processed: 0,
@@ -76,6 +77,7 @@ module SapCommerceMcp
         last_indexed: last_indexed_time&.strftime('%Y-%m-%d %H:%M:%S'),
         classes_count: @db.get_first_value('SELECT COUNT(*) FROM classes'),
         methods_count: @db.get_first_value('SELECT COUNT(*) FROM methods'),
+        fields_count: @db.get_first_value('SELECT COUNT(*) FROM fields'),
         annotations_count: @db.get_first_value('SELECT COUNT(*) FROM annotations'),
         beans_count: @db.get_first_value('SELECT COUNT(*) FROM spring_beans'),
         extensions_count: @db.get_first_value('SELECT COUNT(DISTINCT extension) FROM classes'),
@@ -104,6 +106,7 @@ module SapCommerceMcp
         DROP TABLE IF EXISTS classes;
         DROP TABLE IF EXISTS class_interfaces;
         DROP TABLE IF EXISTS methods;
+        DROP TABLE IF EXISTS fields;
         DROP TABLE IF EXISTS annotations;
         DROP TABLE IF EXISTS spring_beans;
         DROP TABLE IF EXISTS imports;
@@ -149,6 +152,19 @@ module SapCommerceMcp
 
         CREATE INDEX idx_methods_class_id ON methods(class_id);
         CREATE INDEX idx_methods_name ON methods(name);
+
+        CREATE TABLE fields (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          class_id INTEGER,
+          name TEXT NOT NULL,
+          type TEXT NOT NULL,
+          modifiers TEXT,
+          FOREIGN KEY(class_id) REFERENCES classes(id)
+        );
+
+        CREATE INDEX idx_fields_class_id ON fields(class_id);
+        CREATE INDEX idx_fields_name ON fields(name);
+        CREATE INDEX idx_fields_type ON fields(type);
 
         CREATE TABLE annotations (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -244,7 +260,7 @@ module SapCommerceMcp
           class_id, method[:name], method[:signature], method[:return_type],
           method[:modifiers].join(' '), method[:is_constructor] ? 1 : 0
         )
-        
+
         method_id = @db.last_insert_row_id
         stats[:methods_count] += 1
 
@@ -252,6 +268,27 @@ module SapCommerceMcp
         method[:annotations]&.each do |annotation|
           @db.execute('INSERT INTO annotations (target_type, target_id, annotation_name) VALUES (?, ?, ?)',
                      'method', method_id, annotation)
+          stats[:annotations_count] += 1
+        end
+      end
+
+      # Insert fields
+      parsed[:fields]&.each do |field|
+        @db.execute(
+          <<~SQL,
+            INSERT INTO fields (class_id, name, type, modifiers)
+            VALUES (?, ?, ?, ?)
+          SQL
+          class_id, field[:name], field[:type], field[:modifiers].join(' ')
+        )
+
+        field_id = @db.last_insert_row_id
+        stats[:fields_count] += 1
+
+        # Insert field annotations
+        field[:annotations]&.each do |annotation|
+          @db.execute('INSERT INTO annotations (target_type, target_id, annotation_name, annotation_value) VALUES (?, ?, ?, ?)',
+                     'field', field_id, annotation[:name], annotation[:value])
           stats[:annotations_count] += 1
         end
       end

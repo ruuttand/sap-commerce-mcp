@@ -36,4 +36,5 @@ end
 require_relative 'sap_commerce_mcp/tools/search_classes'
 require_relative 'sap_commerce_mcp/tools/get_class_signature'
 require_relative 'sap_commerce_mcp/tools/find_implementations'
+require_relative 'sap_commerce_mcp/tools/find_injected_dependencies'
 require_relative 'sap_commerce_mcp/tools/remaining_tools'

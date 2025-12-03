@@ -14,14 +14,15 @@ This is an MCP (Model Context Protocol) server for SAP Commerce Cloud projects, 
    - Entry point that initializes the MCP server using official Ruby SDK
    - Manages stdio transport for communication with Claude Code
    - Configures server context (indexer, audit logger, project path)
-   - Registers 8 MCP tools as classes (not instances)
+   - Registers 9 MCP tools as classes (not instances)
 
 2. **Indexing Layer** (`lib/sap_commerce_mcp/indexer.rb`)
    - SQLite-based index stored in `~/.sap-commerce-mcp/indexes/`
    - Hash-based naming: `{MD5(project_path)[0..8]}.db`
-   - Schema: classes, methods, annotations, spring_beans, imports, interfaces
+   - Schema: classes, methods, fields, annotations, spring_beans, imports, interfaces
    - Build-once philosophy: core hybris code rarely changes
    - Indexes on first run, reuses on subsequent runs
+   - **Field-level dependency tracking**: Captures Spring injection annotations (@Autowired, @Resource, @Inject) on class fields
 
 3. **Parsing Layer** (`lib/sap_commerce_mcp/parser/`)
    - `SapCommerceParser`: Extension discovery, Spring XML parsing
@@ -90,9 +91,19 @@ This project currently has no tests (no spec/ or test/ directories, no Rakefile)
 - **classes table**: Indexed on name, simple_name, extension, type
 - **class_interfaces table**: Many-to-many relationship for implemented interfaces
 - **methods table**: Foreign key to classes, includes signature and return_type
-- **annotations table**: Polymorphic (target_type + target_id) for class/method annotations
+- **fields table**: Foreign key to classes, tracks field name, type, and modifiers (NEW)
+- **annotations table**: Polymorphic (target_type + target_id) for class/method/field annotations
+  - Supports target_type: 'class', 'method', 'field'
+  - Enables field-level dependency tracking for Spring injection (@Autowired, @Resource, @Inject, @Qualifier)
 - **spring_beans table**: Separate from classes, linked by class_name
 - **imports table**: Tracks all import statements for usage analysis
+
+**Key Feature: Field-Level Dependency Tracking**
+The fields table combined with field annotations enables powerful dependency analysis:
+- Find all services injected into a specific class
+- Find all classes that depend on a specific service
+- Understand Spring DI relationships at the field level
+- Critical for SAP Commerce where field injection is the primary DI pattern
 
 ### Tool Execution Flow
 1. Claude Code sends MCP request via stdio
@@ -165,6 +176,46 @@ From Gemfile:
 - **Index size**: ~50MB for 10K classes
 - **Memory usage**: ~100MB runtime
 - **Token savings**: 60-80% for code discovery tasks
+
+## Available MCP Tools
+
+### 1. SearchClasses
+Search for Java classes by name pattern, with filters for extension, type, and annotations.
+
+### 2. GetClassSignature
+Get method signatures and structure of a specific class without loading the full file.
+
+### 3. FindImplementations
+Find all classes that implement an interface or extend a class.
+
+### 4. FindUsages
+Find all files that import or use a specific class.
+
+### 5. SearchAnnotations
+Find all classes or methods with a specific annotation (e.g., @Controller, @Service).
+
+### 6. GetSpringBeans
+Search Spring bean definitions by bean ID pattern or extension.
+
+### 7. FindInjectedDependencies (NEW)
+**Powerful field-level dependency analysis tool**
+
+Find Spring dependency injection relationships through field-level annotations:
+- Find all services injected INTO a specific class
+- Find all classes that inject a specific service type
+- Filter by annotation type (@Autowired, @Resource, @Inject)
+- Example queries:
+  - "What services does DefaultCheckoutFacade depend on?"
+  - "Find all classes that inject CheckoutService"
+  - "Show me all @Resource annotated fields in my custom extension"
+
+This tool is critical for understanding the dependency graph in SAP Commerce projects where field injection is the primary DI pattern.
+
+### 8. RebuildIndex
+Force rebuild of the code index (useful after major codebase changes).
+
+### 9. GetIndexStats
+Get statistics about the current index (classes, methods, fields, extensions, etc.).
 
 ## Adding New Tools
 
