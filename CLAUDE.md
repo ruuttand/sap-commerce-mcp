@@ -19,10 +19,14 @@ This is an MCP (Model Context Protocol) server for SAP Commerce Cloud projects, 
 2. **Indexing Layer** (`lib/sap_commerce_mcp/indexer.rb`)
    - SQLite-based index stored in `~/.sap-commerce-mcp/indexes/`
    - Hash-based naming: `{MD5(project_path)[0..8]}.db`
-   - Schema: classes, methods, fields, annotations, spring_beans, imports, interfaces
+   - Schema: classes, methods, fields, annotations, spring_beans, bean_dependencies, constructor_params, imports, interfaces
    - Build-once philosophy: core hybris code rarely changes
    - Indexes on first run, reuses on subsequent runs
-   - **Field-level dependency tracking**: Captures Spring injection annotations (@Autowired, @Resource, @Inject) on class fields
+   - **Comprehensive dependency tracking**: Captures ALL Spring injection patterns:
+     - Field injection (@Autowired, @Resource, @Inject on fields)
+     - Constructor injection (@Autowired on constructors + parameters)
+     - Method injection (@Autowired on setter methods)
+     - Spring XML property/constructor-arg refs
 
 3. **Parsing Layer** (`lib/sap_commerce_mcp/parser/`)
    - `SapCommerceParser`: Extension discovery, Spring XML parsing
@@ -91,19 +95,21 @@ This project currently has no tests (no spec/ or test/ directories, no Rakefile)
 - **classes table**: Indexed on name, simple_name, extension, type
 - **class_interfaces table**: Many-to-many relationship for implemented interfaces
 - **methods table**: Foreign key to classes, includes signature and return_type
-- **fields table**: Foreign key to classes, tracks field name, type, and modifiers (NEW)
-- **annotations table**: Polymorphic (target_type + target_id) for class/method/field annotations
-  - Supports target_type: 'class', 'method', 'field'
-  - Enables field-level dependency tracking for Spring injection (@Autowired, @Resource, @Inject, @Qualifier)
+- **fields table**: Foreign key to classes, tracks field name, type, and modifiers
+- **constructor_params table**: Tracks constructor parameters for injection analysis (param_index, param_name, param_type)
+- **annotations table**: Polymorphic (target_type + target_id) for class/method/field/constructor/constructor_param annotations
+  - Supports target_type: 'class', 'method', 'field', 'constructor', 'constructor_param'
+  - Enables comprehensive dependency tracking for all Spring injection patterns
 - **spring_beans table**: Separate from classes, linked by class_name
+- **bean_dependencies table**: Tracks Spring XML property/constructor-arg refs (dependency_type, dependency_name, ref_bean_id, ref_class)
 - **imports table**: Tracks all import statements for usage analysis
 
-**Key Feature: Field-Level Dependency Tracking**
-The fields table combined with field annotations enables powerful dependency analysis:
-- Find all services injected into a specific class
-- Find all classes that depend on a specific service
-- Understand Spring DI relationships at the field level
-- Critical for SAP Commerce where field injection is the primary DI pattern
+**Key Feature: Comprehensive Dependency Tracking**
+The combination of fields, constructor_params, methods, and bean_dependencies tables with polymorphic annotations enables complete dependency graph analysis:
+- Find all dependencies of a class (field + constructor + method + XML)
+- Find all classes that depend on a specific service (reverse lookup)
+- Understand Spring DI relationships across all injection patterns
+- Critical for SAP Commerce which uses all injection patterns extensively
 
 ### Tool Execution Flow
 1. Claude Code sends MCP request via stdio
@@ -197,19 +203,26 @@ Find all classes or methods with a specific annotation (e.g., @Controller, @Serv
 ### 6. GetSpringBeans
 Search Spring bean definitions by bean ID pattern or extension.
 
-### 7. FindInjectedDependencies (NEW)
-**Powerful field-level dependency analysis tool**
+### 7. FindInjectedDependencies
+**Comprehensive dependency analysis tool tracking ALL Spring injection patterns**
 
-Find Spring dependency injection relationships through field-level annotations:
-- Find all services injected INTO a specific class
-- Find all classes that inject a specific service type
+Find Spring dependency injection relationships across all injection types:
+- **Field injection**: @Autowired/@Resource/@Inject on fields
+- **Constructor injection**: @Autowired on constructors + parameters
+- **Method injection**: @Autowired on setter methods
+- **Spring XML**: property/constructor-arg refs in Spring XML files
+
+Two modes:
+- Find all dependencies OF a class: "What services does DefaultCheckoutFacade depend on?"
+- Find all classes INJECTING a type: "What classes inject CheckoutService?"
+
+Features:
 - Filter by annotation type (@Autowired, @Resource, @Inject)
-- Example queries:
-  - "What services does DefaultCheckoutFacade depend on?"
-  - "Find all classes that inject CheckoutService"
-  - "Show me all @Resource annotated fields in my custom extension"
+- Shows injection type (Field/Constructor/Method/Spring XML)
+- Includes annotations, qualifiers, and XML configuration
+- Complete dependency graph visibility
 
-This tool is critical for understanding the dependency graph in SAP Commerce projects where field injection is the primary DI pattern.
+This tool is critical for understanding the complete dependency graph in SAP Commerce projects, which extensively use all injection patterns.
 
 ### 8. RebuildIndex
 Force rebuild of the code index (useful after major codebase changes).

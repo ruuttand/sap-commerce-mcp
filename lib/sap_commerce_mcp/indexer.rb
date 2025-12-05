@@ -109,6 +109,8 @@ module SapCommerceMcp
         DROP TABLE IF EXISTS fields;
         DROP TABLE IF EXISTS annotations;
         DROP TABLE IF EXISTS spring_beans;
+        DROP TABLE IF EXISTS bean_dependencies;
+        DROP TABLE IF EXISTS constructor_params;
         DROP TABLE IF EXISTS imports;
         DROP TABLE IF EXISTS index_metadata;
 
@@ -189,6 +191,33 @@ module SapCommerceMcp
 
         CREATE INDEX idx_spring_beans_bean_id ON spring_beans(bean_id);
         CREATE INDEX idx_spring_beans_class_name ON spring_beans(class_name);
+
+        CREATE TABLE bean_dependencies (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          bean_id TEXT NOT NULL,
+          dependency_type TEXT NOT NULL,
+          dependency_name TEXT,
+          ref_bean_id TEXT,
+          ref_class TEXT,
+          extension TEXT,
+          file_path TEXT
+        );
+
+        CREATE INDEX idx_bean_deps_bean_id ON bean_dependencies(bean_id);
+        CREATE INDEX idx_bean_deps_ref_bean ON bean_dependencies(ref_bean_id);
+        CREATE INDEX idx_bean_deps_ref_class ON bean_dependencies(ref_class);
+
+        CREATE TABLE constructor_params (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          class_id INTEGER,
+          param_index INTEGER,
+          param_name TEXT,
+          param_type TEXT NOT NULL,
+          FOREIGN KEY(class_id) REFERENCES classes(id)
+        );
+
+        CREATE INDEX idx_constructor_params_class_id ON constructor_params(class_id);
+        CREATE INDEX idx_constructor_params_type ON constructor_params(param_type);
 
         CREATE TABLE imports (
           class_id INTEGER,
@@ -306,22 +335,66 @@ module SapCommerceMcp
                    class_id, import)
       end
 
+      # Insert constructor parameters
+      parsed[:constructor_params]&.each do |constructor_info|
+        # Only store if constructor has injection annotation
+        next unless constructor_info[:has_injection_annotation]
+
+        # Store constructor-level annotations
+        constructor_info[:constructor_annotations]&.each do |annotation|
+          @db.execute('INSERT INTO annotations (target_type, target_id, annotation_name, annotation_value) VALUES (?, ?, ?, ?)',
+                     'constructor', class_id, annotation[:name], annotation[:value])
+          stats[:annotations_count] += 1
+        end
+
+        # Store constructor parameters
+        constructor_info[:parameters]&.each_with_index do |param, index|
+          @db.execute(
+            <<~SQL,
+              INSERT INTO constructor_params (class_id, param_index, param_name, param_type)
+              VALUES (?, ?, ?, ?)
+            SQL
+            class_id, index, param[:name], param[:type]
+          )
+
+          param_id = @db.last_insert_row_id
+
+          # Store parameter annotations (e.g., @Qualifier)
+          param[:annotations]&.each do |annotation|
+            @db.execute('INSERT INTO annotations (target_type, target_id, annotation_name, annotation_value) VALUES (?, ?, ?, ?)',
+                       'constructor_param', param_id, annotation[:name], annotation[:value])
+            stats[:annotations_count] += 1
+          end
+        end
+      end
+
     rescue => e
       warn "Error indexing #{file_path}: #{e.message}"
     end
 
     def index_spring_file(file_path, extension_name, stats)
       beans = @parser.parse_spring_xml(file_path)
-      
+
       beans.each do |bean|
         next unless bean[:id] # Skip beans without ID
-        
+
         @db.execute(<<~SQL, bean[:id], bean[:class], bean[:parent], bean[:scope], extension_name, file_path)
           INSERT INTO spring_beans (bean_id, class_name, parent_bean, scope, extension, file_path)
           VALUES (?, ?, ?, ?, ?, ?)
         SQL
-        
+
         stats[:beans_count] += 1
+
+        # Insert bean dependencies (property and constructor-arg refs)
+        bean[:dependencies]&.each do |dependency|
+          @db.execute(
+            <<~SQL,
+              INSERT INTO bean_dependencies (bean_id, dependency_type, dependency_name, ref_bean_id, ref_class, extension, file_path)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+            SQL
+            bean[:id], dependency[:type], dependency[:name], dependency[:ref_bean_id], dependency[:ref_class], extension_name, file_path
+          )
+        end
       end
     rescue => e
       warn "Error indexing Spring file #{file_path}: #{e.message}"

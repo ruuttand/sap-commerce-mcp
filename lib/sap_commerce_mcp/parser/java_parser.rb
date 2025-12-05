@@ -15,7 +15,8 @@ module SapCommerceMcp
           class_info: extract_class_info(content),
           methods: extract_methods(content),
           fields: extract_fields(content),
-          annotations: extract_class_annotations(content)
+          annotations: extract_class_annotations(content),
+          constructor_params: extract_constructor_params(content)
         }
       rescue => e
         warn "Error parsing #{file_path}: #{e.message}"
@@ -223,7 +224,7 @@ module SapCommerceMcp
 
       def extract_class_annotations(content)
         annotations = []
-        
+
         # Find annotations before class declaration
         if (match = content.match(/((?:@[\w.]+(?:\([^)]*\))?[\s\n]*)+)(?:public|protected|private|abstract|final|static)*\s*(?:class|interface|enum)/m))
           annotation_block = match[1]
@@ -234,8 +235,122 @@ module SapCommerceMcp
             }
           end
         end
-        
+
         annotations
+      end
+
+      def extract_constructor_params(content)
+        # Extract class name first
+        class_info = extract_class_info(content)
+        return [] unless class_info
+
+        class_name = class_info[:name]
+        constructor_params = []
+
+        # Match constructor declarations with annotations
+        # Pattern: annotations + modifiers + class_name + (params)
+        constructor_pattern = /
+          ((?:@[\w.]+(?:\([^)]*\))?[\s\n]*)*)  # Constructor annotations (group 1)
+          ((?:public|protected|private)\s+)?    # Modifiers (group 2)
+          #{Regexp.escape(class_name)}          # Constructor name (same as class)
+          \s*\(([^)]*)\)                        # Parameters (group 3)
+        /mx
+
+        content.scan(constructor_pattern) do |match|
+          constructor_annotations_str = match[0]
+          params_str = match[2]
+
+          # Parse constructor-level annotations
+          constructor_annotations = []
+          if constructor_annotations_str
+            constructor_annotations_str.scan(/@([\w.]+)(?:\(([^)]*)\))?/) do |ann_match|
+              constructor_annotations << {
+                name: ann_match[0],
+                value: ann_match[1]
+              }
+            end
+          end
+
+          # Parse parameters
+          next if params_str.nil? || params_str.strip.empty?
+
+          params = parse_constructor_parameters(params_str)
+
+          # Store constructor info with its parameters
+          constructor_params << {
+            has_injection_annotation: constructor_annotations.any? { |a|
+              ['Autowired', 'Resource', 'Inject'].include?(a[:name])
+            },
+            constructor_annotations: constructor_annotations,
+            parameters: params
+          }
+        end
+
+        constructor_params
+      end
+
+      def parse_constructor_parameters(params_str)
+        # Split by commas, but be careful of generic types like Map<String, String>
+        params = []
+        current_param = ''
+        angle_bracket_depth = 0
+
+        params_str.each_char do |char|
+          if char == '<'
+            angle_bracket_depth += 1
+            current_param << char
+          elsif char == '>'
+            angle_bracket_depth -= 1
+            current_param << char
+          elsif char == ',' && angle_bracket_depth == 0
+            params << parse_single_parameter(current_param.strip)
+            current_param = ''
+          else
+            current_param << char
+          end
+        end
+
+        # Add the last parameter
+        params << parse_single_parameter(current_param.strip) unless current_param.strip.empty?
+
+        params
+      end
+
+      def parse_single_parameter(param_str)
+        # Match: (annotations) type name
+        # Example: @Qualifier("foo") final ProductService productService
+
+        annotations = []
+
+        # Extract annotations
+        param_str.gsub!(/@([\w.]+)(?:\(([^)]*)\))?/) do |match|
+          annotations << {
+            name: $1,
+            value: $2
+          }
+          '' # Remove annotation from string
+        end
+
+        # Remove 'final' keyword
+        param_str.gsub!(/\bfinal\s+/, '')
+
+        # Now split by whitespace to get type and name
+        parts = param_str.strip.split(/\s+/)
+
+        if parts.length >= 2
+          {
+            type: parts[0..-2].join(' '),  # Everything except last part is type
+            name: parts[-1],                # Last part is name
+            annotations: annotations
+          }
+        else
+          # Malformed parameter, just use what we have
+          {
+            type: parts[0] || 'unknown',
+            name: 'unknown',
+            annotations: annotations
+          }
+        end
       end
     end
   end

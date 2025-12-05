@@ -17,14 +17,16 @@ Built a production-ready MCP (Model Context Protocol) server for SAP Commerce Cl
 - Nokogiri for XML parsing
 
 **Components:**
-1. ✅ **8 MCP Tools** (using SDK's MCP::Tool base class)
-2. ✅ **SQLite Indexer** (unchanged from manual version)
-3. ✅ **Java Parser** (regex-based, SAP Commerce-aware)
-4. ✅ **Search Engine** (fast SQL queries)
+1. ✅ **9 MCP Tools** (using SDK's MCP::Tool base class)
+2. ✅ **SQLite Indexer** (enhanced with dependency tracking)
+3. ✅ **Java Parser** (regex-based, SAP Commerce-aware, constructor params)
+4. ✅ **Search Engine** (fast SQL queries, dependency graphs)
 5. ✅ **Audit Logger** (complete JSON logs)
-6. ✅ **SAP Commerce Parser** (extensions, ItemModels, Spring beans)
+6. ✅ **SAP Commerce Parser** (extensions, ItemModels, Spring beans, XML dependencies)
 
-**Total:** ~2,000 lines of Ruby code
+**Total:** ~2,200 lines of Ruby code
+
+**Latest Enhancement:** Comprehensive dependency tracking (field/constructor/method/XML injection)
 
 ---
 
@@ -71,7 +73,7 @@ server.connect(transport)
 
 ---
 
-## The 8 MCP Tools
+## The 9 MCP Tools
 
 ### 1. SearchClasses
 **Purpose:** Find Java classes by name or pattern  
@@ -113,19 +115,34 @@ end
 **Use Case:** "Find all @Controller classes"  
 **Token Savings:** 90% (1K vs 25K tokens)
 
-### 6. GetSpringBeans
-**Purpose:** Search Spring bean definitions  
-**Use Case:** "Find cart-related beans"  
+### 6. FindInjectedDependencies ⭐ ENHANCED
+**Purpose:** Comprehensive dependency analysis (ALL injection types)
+**Use Case:** "What services does DefaultCheckoutFacade depend on?"
+**Token Savings:** 90% (1-2K vs 50K+ tokens)
+
+**Tracks:**
+- Field injection (@Autowired/@Resource/@Inject on fields)
+- Constructor injection (@Autowired on constructors + parameters)
+- Method injection (@Autowired on setter methods)
+- Spring XML property/constructor-arg refs
+
+**Modes:**
+1. Find dependencies OF a class → Shows all injected services
+2. Find classes INJECTING a type → Impact analysis
+
+### 7. GetSpringBeans
+**Purpose:** Search Spring bean definitions
+**Use Case:** "Find cart-related beans"
 **Token Savings:** 85% (1K vs 15K tokens)
 
-### 7. RebuildIndex
-**Purpose:** Rebuild SQLite index  
-**Use Case:** "Rebuild index after upgrade"  
+### 8. RebuildIndex
+**Purpose:** Rebuild SQLite index
+**Use Case:** "Rebuild index after upgrade"
 **Admin Tool:** Maintenance operation
 
-### 8. GetIndexStats
-**Purpose:** Show index statistics  
-**Use Case:** "Show index stats"  
+### 9. GetIndexStats
+**Purpose:** Show index statistics
+**Use Case:** "Show index stats"
 **Admin Tool:** Monitoring operation
 
 ---
@@ -271,10 +288,28 @@ CREATE TABLE methods (
   is_constructor INTEGER
 );
 
+-- Fields
+CREATE TABLE fields (
+  id INTEGER PRIMARY KEY,
+  class_id INTEGER,
+  name TEXT,
+  type TEXT,
+  modifiers TEXT
+);
+
+-- Constructor Parameters (NEW)
+CREATE TABLE constructor_params (
+  id INTEGER PRIMARY KEY,
+  class_id INTEGER,
+  param_index INTEGER,
+  param_name TEXT,
+  param_type TEXT
+);
+
 -- Annotations
 CREATE TABLE annotations (
   id INTEGER PRIMARY KEY,
-  target_type TEXT,                -- class/method/field
+  target_type TEXT,                -- class/method/field/constructor/constructor_param
   target_id INTEGER,
   annotation_name TEXT,
   annotation_value TEXT
@@ -291,6 +326,18 @@ CREATE TABLE spring_beans (
   file_path TEXT
 );
 
+-- Bean Dependencies (NEW)
+CREATE TABLE bean_dependencies (
+  id INTEGER PRIMARY KEY,
+  bean_id TEXT,
+  dependency_type TEXT,            -- property/constructor-arg
+  dependency_name TEXT,
+  ref_bean_id TEXT,
+  ref_class TEXT,
+  extension TEXT,
+  file_path TEXT
+);
+
 -- Imports
 CREATE TABLE imports (
   class_id INTEGER,
@@ -301,8 +348,11 @@ CREATE TABLE imports (
 **Indexes for Fast Queries:**
 - idx_classes_name, idx_classes_simple_name
 - idx_methods_name, idx_methods_class_id
-- idx_annotations_name
-- idx_spring_beans_bean_id
+- idx_fields_type, idx_fields_class_id
+- idx_constructor_params_type, idx_constructor_params_class_id
+- idx_annotations_name, idx_annotations_target
+- idx_spring_beans_bean_id, idx_spring_beans_class_name
+- idx_bean_deps_bean_id, idx_bean_deps_ref_bean, idx_bean_deps_ref_class
 
 ---
 

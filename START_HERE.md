@@ -9,7 +9,8 @@ Welcome! This is your complete SAP Commerce MCP Server built with the **official
 A production-ready MCP server that enables Claude Code to efficiently navigate your SAP Commerce codebase with **60-80% token reduction**.
 
 **Key Features:**
-- ✅ 8 MCP tools using official Anthropic/Shopify SDK
+- ✅ 9 MCP tools using official Anthropic/Shopify SDK
+- ✅ **Comprehensive dependency tracking** (field/constructor/method/XML injection)
 - ✅ Fast SQLite indexing (< 100ms searches)
 - ✅ Complete audit logging
 - ✅ SAP Commerce-aware (ItemModels, extensions, Spring beans)
@@ -21,31 +22,28 @@ A production-ready MCP server that enables Claude Code to efficiently navigate y
 
 **Choose your path:**
 
-### Path A: "I want to get started NOW" (20 minutes)
-→ Read: **[GETTING_STARTED.md](GETTING_STARTED.md)**  
-Complete step-by-step checklist with verification at each step.
-
-### Path B: "I want complete understanding first" (30 minutes)
+### Path A: "I want complete understanding first" (30 minutes)
 → Read: **[SETUP_GUIDE.md](SETUP_GUIDE.md)**  
 Comprehensive guide with detailed explanations.
 
-### Path C: "Just give me the commands" (5 minutes)
+### Path B: "Just give me the commands" (5 minutes)
 → Read: **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** or **[COMMANDS.md](COMMANDS.md)**  
 Quick command reference for experienced users.
 
 ---
 
-## ⚡ Super Quick Start (For Impatient People)
+## ⚡ Super Quick Start
 
+### For Claude Code Users
 ```bash
 # 1. Install
 bundle install
 gem install mcp
 
-# 2. Run (this builds the index automatically)
+# 2. Run (builds index automatically)
 bin/sap-commerce-mcp /path/to/your/hybris
 
-# 3. Add MCP server to Claude 
+# 3. Add MCP server to Claude
 claude mcp add sap-commerce --scope user -- /full/path/sap-commerce-mcp/bin/sap-commerce-mcp /full/path/hybris
 
 # 4. Restart Claude Code
@@ -54,15 +52,35 @@ claude mcp add sap-commerce --scope user -- /full/path/sap-commerce-mcp/bin/sap-
 Ask Claude: "Find ProductService in my hybris project"
 ```
 
-**That's it!** See full docs if you run into issues.
+### For IntelliJ + GitHub Copilot Users ⭐ NEW!
+```bash
+# 1. Create config
+mkdir -p ~/.config/github-copilot/intellij
+cat > ~/.config/github-copilot/intellij/mcp.json <<'EOF'
+{
+  "mcpServers": {
+    "sap-commerce": {
+      "command": "/FULL/PATH/TO/bin/sap-commerce-mcp",
+      "args": ["/FULL/PATH/TO/hybris"]
+    }
+  }
+}
+EOF
+
+# 2. Edit paths in the file above
+# 3. Restart IntelliJ completely
+# 4. Test in Copilot Chat (Agent mode)
+```
+
+**See [INTELLIJ_COPILOT_SETUP.md](INTELLIJ_COPILOT_SETUP.md) for detailed guide!**
 
 ---
 
 ## 📚 Complete Documentation Index
 
 ### Getting Started
-1. **[GETTING_STARTED.md](GETTING_STARTED.md)** - Step-by-step checklist ⭐ START HERE
-2. **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Complete setup guide with explanations
+1. **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Complete setup guide with explanations
+2. **[INTELLIJ_COPILOT_SETUP.md](INTELLIJ_COPILOT_SETUP.md)** - ⭐ NEW! IntelliJ + GitHub Copilot setup
 3. **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick command reference
 4. **[COMMANDS.md](COMMANDS.md)** - Cheatsheet of all commands
 
@@ -81,8 +99,7 @@ Ask Claude: "Find ProductService in my hybris project"
 
 **For checklist-followers:**
 1. This file (you are here!)
-2. [GETTING_STARTED.md](GETTING_STARTED.md) - Complete the checklist
-3. [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - Keep open while using
+2. [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - Keep open while using
 
 **For detail-oriented:**
 1. This file (you are here!)
@@ -119,7 +136,6 @@ ls /path/to/hybris/bin/custom
 # (no command to check, you know if you have it)
 ```
 
-All good? → Proceed to [GETTING_STARTED.md](GETTING_STARTED.md)
 
 ---
 
@@ -181,7 +197,7 @@ Result: 85% token savings, 10x faster
 
 ---
 
-## 🔧 The 8 Tools
+## 🔧 The 9 Tools
 
 When you ask Claude questions, it automatically uses these tools:
 
@@ -189,10 +205,11 @@ When you ask Claude questions, it automatically uses these tools:
 2. **get_class_signature** - "What methods does DefaultCartService have?"
 3. **find_implementations** - "Show implementations of CartService"
 4. **find_usages** - "Where is ProductModel used?"
-5. **search_annotations** - "Find all @Controller classes"
-6. **get_spring_beans** - "Find cart-related Spring beans"
-7. **rebuild_index** - "Rebuild the index"
-8. **get_index_stats** - "Show index statistics"
+5. **find_injected_dependencies** - **"What services does CheckoutFacade depend on?"** ⭐ NEW & ENHANCED
+6. **search_annotations** - "Find all @Controller classes"
+7. **get_spring_beans** - "Find cart-related Spring beans"
+8. **rebuild_index** - "Rebuild the index"
+9. **get_index_stats** - "Show index statistics"
 
 You don't call these directly - Claude uses them automatically!
 
@@ -244,14 +261,25 @@ Every tool call → Log to JSON file
 → 75% token savings
 ```
 
-### 3. PR Review
+### 3. Dependency Analysis ⭐ NEW
+```
+"What services does DefaultCheckoutFacade depend on?"
+→ Shows ALL injected dependencies (field/constructor/method/XML)
+→ Complete dependency visibility
+
+"What classes inject CheckoutService?"
+→ Find all consumers of a service
+→ Impact analysis for refactoring
+```
+
+### 4. PR Review
 ```
 "Review this PR adding PaymentValidationService"
 → Check naming, patterns, missing updates
 → Comprehensive review in 2-3 minutes
 ```
 
-### 4. Creating New Features
+### 5. Creating New Features
 ```
 "Create a custom product recommendation service"
 → Find similar services, see patterns, generate code
