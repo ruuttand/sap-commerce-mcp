@@ -23,9 +23,10 @@ See **[SETUP_GUIDE.md](SETUP_GUIDE.md)** for complete instructions.
 ## ✨ Features
 
 - ⚡ **60-80% Token Reduction** - Find code without loading files
-- 🔍 **9 Search Tools** - Classes, methods, field injection, annotations, Spring beans
+- 🔍 **9 Search Tools** - Classes, methods, **comprehensive dependency tracking**, annotations, Spring beans
+- 🎯 **ALL Injection Types** - Field, Constructor, Method, Spring XML dependencies
 - 📊 **Complete Audit Trail** - Every operation logged
-- 🏗️ **SAP Commerce-Aware** - ItemModels, extensions, hybris patterns, @Autowired tracking
+- 🏗️ **SAP Commerce-Aware** - ItemModels, extensions, hybris patterns, full DI tracking
 - 🛠️ **Official SDK** - Built with Anthropic/Shopify Ruby SDK
 - 💾 **SQLite Index** - Fast queries (< 100ms)
 
@@ -45,18 +46,26 @@ See **[SETUP_GUIDE.md](SETUP_GUIDE.md)** for complete instructions.
 → 75% token savings vs traditional approach
 ```
 
-### Dependency Analysis (NEW!)
+### Dependency Analysis ⭐ ENHANCED!
 ```
 "What services does DefaultCheckoutFacade depend on?"
-→ find_injected_dependencies shows @Autowired fields
-→ Understand runtime dependencies instantly
+→ find_injected_dependencies shows ALL dependencies:
+  • Field injection (@Autowired/@Resource/@Inject)
+  • Constructor injection (with parameters)
+  • Method injection (setter methods)
+  • Spring XML property/constructor-arg refs
+→ Complete dependency graph visibility
 ```
 
 ### Impact Analysis
 ```
 "What depends on CheckoutService?"
-→ Shows all classes injecting CheckoutService
-→ Plan refactoring with confidence
+→ Shows ALL classes using CheckoutService:
+  • Via field injection
+  • Via constructor injection
+  • Via method injection
+  • Via Spring XML configuration
+→ Complete impact analysis for refactoring
 ```
 
 ### PR Review
@@ -72,7 +81,7 @@ See **[SETUP_GUIDE.md](SETUP_GUIDE.md)** for complete instructions.
 2. **get_class_signature** - Get methods without loading file
 3. **find_implementations** - Find all implementers
 4. **find_usages** - Find where class is used
-5. **find_injected_dependencies** - **NEW!** Analyze @Autowired/@Resource field injection
+5. **find_injected_dependencies** - **⭐ ENHANCED!** Complete dependency analysis (field/constructor/method/XML)
 6. **search_annotations** - Find annotated code
 7. **get_spring_beans** - Search Spring beans
 8. **rebuild_index** - Rebuild index
@@ -151,7 +160,8 @@ Example log:
 
 ## 📚 Documentation
 
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Complete setup instructions
+- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Complete setup instructions (Claude Code)
+- **[INTELLIJ_COPILOT_SETUP.md](INTELLIJ_COPILOT_SETUP.md)** - ⭐ IntelliJ + GitHub Copilot setup
 - **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Quick reference card
 - **[COMMANDS.md](COMMANDS.md)** - Command cheatsheet
 - **[CLAUDE.md](CLAUDE.md)** - Architecture and implementation details (for Claude Code)

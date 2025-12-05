@@ -28,12 +28,18 @@ module SapCommerceMcp
 
         # Use local-name() to ignore XML namespaces
         doc.xpath('//*[local-name()="bean"]').each do |bean_node|
+          bean_id = bean_node['id']
+
+          # Extract property and constructor-arg dependencies
+          dependencies = extract_bean_dependencies(bean_node)
+
           beans << {
-            id: bean_node['id'],
+            id: bean_id,
             class: bean_node['class'],
             parent: bean_node['parent'],
             scope: bean_node['scope'],
-            abstract: bean_node['abstract'] == 'true'
+            abstract: bean_node['abstract'] == 'true',
+            dependencies: dependencies
           }
         end
 
@@ -128,6 +134,48 @@ module SapCommerceMcp
       end
 
       private
+
+      def extract_bean_dependencies(bean_node)
+        dependencies = []
+
+        # Extract <property name="..." ref="..."/>
+        bean_node.xpath('.//*[local-name()="property"]').each do |prop|
+          ref = prop['ref']
+          value_attr = prop['value']
+
+          # Only track ref-based dependencies (not value-based)
+          if ref
+            dependencies << {
+              type: 'property',
+              name: prop['name'],
+              ref_bean_id: ref,
+              ref_class: nil
+            }
+          end
+        end
+
+        # Extract <constructor-arg ref="..." /> or <constructor-arg><ref bean="..."/></constructor-arg>
+        bean_node.xpath('.//*[local-name()="constructor-arg"]').each_with_index do |arg, index|
+          ref = arg['ref']
+          name = arg['name']
+          type = arg['type']
+
+          # Check for nested <ref bean="..."/> element
+          ref_element = arg.at_xpath('.//*[local-name()="ref"]')
+          ref ||= ref_element['bean'] if ref_element
+
+          if ref
+            dependencies << {
+              type: 'constructor-arg',
+              name: name || index.to_s,  # Use name if available, otherwise index
+              ref_bean_id: ref,
+              ref_class: type
+            }
+          end
+        end
+
+        dependencies
+      end
 
       def detect_extension(file_path)
         # Extract extension name from path

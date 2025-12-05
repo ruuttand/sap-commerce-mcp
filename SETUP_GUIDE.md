@@ -282,7 +282,7 @@ grep "search_classes" ~/.sap-commerce-mcp/logs/audit-*.log
 
 ## Available MCP Tools
 
-The server provides 8 tools that Claude Code can use automatically:
+The server provides 9 tools that Claude Code can use automatically:
 
 ### 1. search_classes
 Find Java classes by name or pattern
@@ -312,28 +312,46 @@ Claude: "Where is ProductModel used?"
 Tool: find_usages("ProductModel")
 ```
 
-### 5. search_annotations
+### 5. find_injected_dependencies ⭐ ENHANCED
+Find ALL dependency injection patterns
+```
+Claude: "What services does DefaultCheckoutFacade depend on?"
+Tool: find_injected_dependencies(class_name: "DefaultCheckoutFacade")
+→ Returns: Field, Constructor, Method, and XML injections
+
+Claude: "What classes inject CheckoutService?"
+Tool: find_injected_dependencies(injected_type: "CheckoutService")
+→ Returns: All classes using CheckoutService (any injection type)
+```
+
+**Tracks:**
+- Field injection (`@Autowired`, `@Resource`, `@Inject` on fields)
+- Constructor injection (`@Autowired` on constructor + parameters)
+- Method injection (`@Autowired` on setter methods)
+- Spring XML property/constructor-arg refs
+
+### 6. search_annotations
 Find annotated classes/methods
 ```
 Claude: "Find all @Controller classes"
 Tool: search_annotations("Controller", target_type: "class")
 ```
 
-### 6. get_spring_beans
+### 7. get_spring_beans
 Search Spring bean definitions
 ```
 Claude: "Find Spring beans for cart"
 Tool: get_spring_beans("*cart*")
 ```
 
-### 7. rebuild_index
+### 8. rebuild_index
 Rebuild the index
 ```
 Claude: "Rebuild index"
 Tool: rebuild_index(force: true)
 ```
 
-### 8. get_index_stats
+### 9. get_index_stats
 Get index statistics
 ```
 Claude: "Show index stats"

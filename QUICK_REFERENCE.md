@@ -42,8 +42,8 @@ bin/sap-commerce-mcp /path/to/hybris
 | "What methods does DefaultCartService have?" | get_class_signature | Returns signatures without loading file |
 | "Show implementations of CartService" | find_implementations | Lists all implementing classes |
 | "Where is ProductModel used?" | find_usages | Shows all imports/usages |
-| **"What depends on CheckoutService?"** | **find_injected_dependencies** | **Shows @Autowired/@Resource fields** |
-| **"What services does DefaultCheckoutFacade use?"** | **find_injected_dependencies** | **Lists injected dependencies** |
+| **"What depends on CheckoutService?"** ⭐ | **find_injected_dependencies** | **Shows ALL injection types (field/constructor/method/XML)** |
+| **"What services does DefaultCheckoutFacade use?"** ⭐ | **find_injected_dependencies** | **Complete dependency graph (all injection types)** |
 | "Find all @Controller classes" | search_annotations | Lists annotated classes |
 | "Find cart-related Spring beans" | get_spring_beans | Searches bean definitions |
 | "Rebuild the index" | rebuild_index | Rebuilds SQLite index |

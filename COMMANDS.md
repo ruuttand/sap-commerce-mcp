@@ -39,11 +39,12 @@ claude mcp add sap-commerce --scope user -- /FULL/PATH/TO/sap-commerce-mcp/bin/s
 "Where is ProductModel used?"
 "What files import CartService?"
 
-# Dependency analysis (NEW - field injection)
+# Dependency analysis ⭐ ENHANCED - ALL injection types
 "What services does DefaultCheckoutFacade depend on?"
 "What classes inject CheckoutService?"
-"Show me dependencies of DefaultCartFacade"
-"Find all classes that use ProductService via @Autowired"
+"Show me all dependencies of DefaultCartFacade"
+"Find all classes that use ProductService"
+"What Spring beans does checkoutFacade depend on?"
 
 # Spring beans
 "Find Spring beans for cart"
@@ -125,8 +126,9 @@ tail -5 ~/.sap-commerce-mcp/logs/audit-*.log
 ## File Locations
 
 ```bash
-# Index database
+# Index database (enhanced with dependency tracking)
 ~/.sap-commerce-mcp/indexes/*.db
+# New tables: bean_dependencies, constructor_params
 
 # Audit logs
 ~/.sap-commerce-mcp/logs/audit-YYYY-MM-DD.log
