@@ -300,9 +300,8 @@ module SapCommerceMcp
 
               # Check if there's a parenthesized value
               after_name = line[($~.end(0))..-1]
-              if after_name && after_name.strip.start_with?('(')
+              if after_name && (paren_start = after_name.index('('))
                 # Extract balanced parentheses from this line only
-                paren_start = after_name.index('(')
                 value, end_pos = extract_balanced_parentheses(after_name, paren_start)
 
                 # Check if the closing paren is found on this line
