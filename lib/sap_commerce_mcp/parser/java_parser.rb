@@ -109,7 +109,7 @@ module SapCommerceMcp
         # Use word boundary \b to avoid matching "class" inside comments
 
         # Remove comments first for more accurate matching
-        content_without_comments = content.gsub(%r{/\*.*?\*/}m, ' ').gsub(%r{//.*$}, '')
+        content_without_comments = content.gsub(%r{/\*.*?\*/}m, ' ').gsub(%r{//.*?$}m, '')
 
         pattern = /
           \b((?:public|protected|private|abstract|final|static)\s+)*  # Word boundary + Modifiers
