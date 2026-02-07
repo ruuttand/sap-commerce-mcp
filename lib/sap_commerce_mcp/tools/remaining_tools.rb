@@ -227,7 +227,8 @@ module SapCommerceMcp
             description: 'Force full reindex even if index exists',
             default: false
           }
-        }
+        },
+        required: []
       )
 
       class << self
@@ -275,11 +276,18 @@ module SapCommerceMcp
 
       input_schema(
         type: 'object',
-        properties: {}
+        properties: {
+          _unused: {
+            type: 'boolean',
+            description: 'Unused parameter for schema compatibility',
+            default: false
+          }
+        },
+        required: []
       )
 
       class << self
-        def call(server_context:)
+        def call(_unused: false, server_context:)
           start_time = Time.now
 
           indexer = server_context[:indexer]

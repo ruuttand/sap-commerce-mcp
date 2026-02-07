@@ -44,7 +44,8 @@ module SapCommerceMcp
             description: 'Maximum number of results (default: 100)',
             default: 100
           }
-        }
+        },
+        required: []
       )
 
       class << self
