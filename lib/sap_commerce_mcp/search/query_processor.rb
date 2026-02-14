@@ -14,7 +14,7 @@ module SapCommerceMcp
       end
 
       def get_class_signature(class_name, include_inherited = false)
-        # Get class basic info
+        # Tier 1: Try exact FQN match (backwards compatible)
         class_info = @db.get_first_row(<<~SQL, class_name)
           SELECT c.*, GROUP_CONCAT(ci.interface_name, ', ') as interfaces
           FROM classes c
@@ -22,6 +22,27 @@ module SapCommerceMcp
           WHERE c.name = ?
           GROUP BY c.id
         SQL
+
+        # Tier 2: Try simple name match if no exact match
+        if class_info.nil?
+          candidates = @db.execute(<<~SQL, class_name, class_name)
+            SELECT c.*, GROUP_CONCAT(ci.interface_name, ', ') as interfaces
+            FROM classes c
+            LEFT JOIN class_interfaces ci ON c.id = ci.class_id
+            WHERE c.name = ? OR c.simple_name = ?
+            GROUP BY c.id
+          SQL
+
+          # Tier 3: Handle ambiguity
+          if candidates.size > 1
+            return {
+              error: "Ambiguous class name: '#{class_name}'. Found #{candidates.size} matches.",
+              candidates: candidates.map { |c| c['name'] }
+            }
+          elsif candidates.size == 1
+            class_info = candidates.first
+          end
+        end
 
         return nil unless class_info
 
@@ -35,6 +56,22 @@ module SapCommerceMcp
           ORDER BY m.name
         SQL
 
+        # Add inherited methods if requested
+        if include_inherited && class_info['parent_class']
+          parent_class = class_info['parent_class'].split(/\s+implements\s+/).first.strip
+          methods += fetch_parent_methods(parent_class, 0, 5)
+        end
+
+        # Get fields
+        fields = @db.execute(<<~SQL, class_info['id'])
+          SELECT f.*, GROUP_CONCAT(a.annotation_name, ', ') as annotations
+          FROM fields f
+          LEFT JOIN annotations a ON a.target_type = 'field' AND a.target_id = f.id
+          WHERE f.class_id = ?
+          GROUP BY f.id
+          ORDER BY f.name
+        SQL
+
         # Get class annotations
         annotations = @db.execute(<<~SQL, class_info['id'])
           SELECT annotation_name, annotation_value
@@ -45,8 +82,32 @@ module SapCommerceMcp
         {
           class: class_info,
           methods: methods,
+          fields: fields,
           annotations: annotations
         }
+      end
+
+      def fetch_parent_methods(parent_class_name, depth, max_depth)
+        return [] if depth >= max_depth || parent_class_name.nil? || parent_class_name.empty?
+
+        parent = @db.get_first_row("SELECT * FROM classes WHERE name = ?", parent_class_name)
+        return [] unless parent
+
+        parent_methods = @db.execute(<<~SQL, parent['id'])
+          SELECT m.*, GROUP_CONCAT(a.annotation_name, ', ') as annotations
+          FROM methods m
+          LEFT JOIN annotations a ON a.target_type = 'method' AND a.target_id = m.id
+          WHERE m.class_id = ? AND m.modifiers NOT LIKE '%private%'
+          GROUP BY m.id
+          ORDER BY m.name
+        SQL
+
+        if parent['parent_class']
+          grandparent_class = parent['parent_class'].split(/\s+implements\s+/).first.strip
+          parent_methods += fetch_parent_methods(grandparent_class, depth + 1, max_depth)
+        end
+
+        parent_methods
       end
 
       def find_implementations(class_or_interface, limit = 100)
@@ -193,11 +254,11 @@ module SapCommerceMcp
 
       def search_field_annotations(annotation_name, limit)
         @db.execute(<<~SQL, annotation_name, limit)
-          SELECT c.name as class_name, c.file_path, a.annotation_value
+          SELECT c.name as class_name, f.name as field_name, f.type,
+                 c.file_path, a.annotation_value
           FROM annotations a
-          JOIN classes c ON a.target_type = 'field' AND c.id IN (
-            SELECT class_id FROM methods WHERE id = a.target_id
-          )
+          JOIN fields f ON a.target_type = 'field' AND a.target_id = f.id
+          JOIN classes c ON f.class_id = c.id
           WHERE a.annotation_name = ?
           LIMIT ?
         SQL

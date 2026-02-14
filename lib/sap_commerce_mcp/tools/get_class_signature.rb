@@ -42,6 +42,9 @@ module SapCommerceMcp
 
           if signature.nil?
             result = { error: "Class not found: #{class_name}" }
+          elsif signature.is_a?(Hash) && signature[:error]
+            # Handle error responses (e.g., ambiguous class names)
+            result = signature
           else
             result = Search::ResultFormatter.format_signature(signature)
           end
