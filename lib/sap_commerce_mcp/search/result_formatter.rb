@@ -18,7 +18,7 @@ module SapCommerceMcp
 
       def self.format_signature(signature_data)
         class_info = signature_data[:class]
-        
+
         {
           class: {
             name: class_info['name'],
@@ -30,11 +30,12 @@ module SapCommerceMcp
             file_path: class_info['file_path']
           },
           annotations: signature_data[:annotations].map { |a|
-            a['annotation_value'] ? 
-              "@#{a['annotation_name']}(#{a['annotation_value']})" : 
+            a['annotation_value'] ?
+              "@#{a['annotation_name']}(#{a['annotation_value']})" :
               "@#{a['annotation_name']}"
           },
-          methods: signature_data[:methods].map { |m| format_method(m) }
+          methods: signature_data[:methods].map { |m| format_method(m) },
+          fields: signature_data[:fields].map { |f| format_field(f) }
         }
       end
 
@@ -46,6 +47,15 @@ module SapCommerceMcp
           modifiers: method_data['modifiers']&.split(' ') || [],
           is_constructor: method_data['is_constructor'] == 1,
           annotations: method_data['annotations']&.split(', ') || []
+        }.compact
+      end
+
+      def self.format_field(field_data)
+        {
+          name: field_data['name'],
+          type: field_data['type'],
+          modifiers: field_data['modifiers']&.split(' ') || [],
+          annotations: field_data['annotations']&.split(', ')&.map { |a| "@#{a}" } || []
         }.compact
       end
 

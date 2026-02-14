@@ -146,6 +146,7 @@ class GetClassSignatureTest < Minitest::Test
     assert class_info.key?('package')
     assert class_info.key?('extension')
     assert class_info.key?('file_path')
+    assert result.key?('fields')
   end
 
   # --- Package info ---
@@ -159,5 +160,65 @@ class GetClassSignatureTest < Minitest::Test
     )
 
     assert_equal 'com.tieto.kalmar.ws.controller', result['class']['package']
+  end
+
+  # --- Simple name query ---
+
+  def test_get_signature_with_simple_name
+    result = parse_response(
+      SapCommerceMcp::Tools::GetClassSignature.call(
+        class_name: 'LoginController',
+        server_context: server_context
+      )
+    )
+    refute result.key?('error')
+    assert_equal 'com.tieto.kalmar.ws.controller.LoginController', result['class']['name']
+  end
+
+  # --- Ambiguous simple name ---
+
+  def test_ambiguous_simple_name_error
+    result = parse_response(
+      SapCommerceMcp::Tools::GetClassSignature.call(
+        class_name: 'ObjectFactory',
+        server_context: server_context
+      )
+    )
+    assert result.key?('error')
+    assert_match(/ambiguous/i, result['error'])
+    assert result.key?('candidates')
+    assert_operator result['candidates'].size, :>, 1
+  end
+
+  # --- Include inherited methods ---
+
+  def test_include_inherited_methods
+    result = parse_response(
+      SapCommerceMcp::Tools::GetClassSignature.call(
+        class_name: 'com.tieto.kalmar.core.user.impl.DefaultKalmarB2BCustomerService',
+        include_inherited: true,
+        server_context: server_context
+      )
+    )
+    method_count = result['methods'].size
+    assert_operator method_count, :>, 5
+  end
+
+  # --- Signature includes fields ---
+
+  def test_signature_includes_fields
+    result = parse_response(
+      SapCommerceMcp::Tools::GetClassSignature.call(
+        class_name: 'com.tieto.kalmar.ws.controller.LoginController',
+        server_context: server_context
+      )
+    )
+    assert result.key?('fields')
+
+    if result['fields'].size > 0
+      field = result['fields'].first
+      assert field.key?('name')
+      assert field.key?('type')
+    end
   end
 end
