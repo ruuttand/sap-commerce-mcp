@@ -193,15 +193,28 @@ class GetClassSignatureTest < Minitest::Test
   # --- Include inherited methods ---
 
   def test_include_inherited_methods
-    result = parse_response(
+    base_result = parse_response(
+      SapCommerceMcp::Tools::GetClassSignature.call(
+        class_name: 'com.tieto.kalmar.core.user.impl.DefaultKalmarB2BCustomerService',
+        server_context: server_context
+      )
+    )
+
+    inherited_result = parse_response(
       SapCommerceMcp::Tools::GetClassSignature.call(
         class_name: 'com.tieto.kalmar.core.user.impl.DefaultKalmarB2BCustomerService',
         include_inherited: true,
         server_context: server_context
       )
     )
-    method_count = result['methods'].size
-    assert_operator method_count, :>, 5
+
+    base_method_count = base_result['methods'].size
+    inherited_method_count = inherited_result['methods'].size
+
+    # Ensure that enabling include_inherited actually increases the number of methods
+    assert_operator inherited_method_count, :>, base_method_count
+    # Preserve the original expectation of having a reasonably large method set
+    assert_operator inherited_method_count, :>, 5
   end
 
   # --- Signature includes fields ---
