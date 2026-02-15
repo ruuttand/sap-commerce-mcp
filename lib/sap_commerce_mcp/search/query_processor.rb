@@ -114,15 +114,19 @@ module SapCommerceMcp
         # Find classes that extend or implement the given class/interface
         results = []
 
-        # Check by parent class
-        results += @db.execute(<<~SQL, class_or_interface, limit)
+        # Check by parent class (inheritance/extends)
+        subclasses = @db.execute(<<~SQL, class_or_interface, limit)
           SELECT * FROM classes
           WHERE parent_class = ?
           LIMIT ?
         SQL
 
-        # Check by interface
-        results += @db.execute(<<~SQL, class_or_interface, limit - results.size)
+        subclasses.each do |row|
+          results << { class_data: row, relationship: 'extends' }
+        end
+
+        # Check by interface (implementation/implements)
+        implementations = @db.execute(<<~SQL, class_or_interface, limit - results.size)
           SELECT DISTINCT c.*
           FROM classes c
           JOIN class_interfaces ci ON c.id = ci.class_id
@@ -130,7 +134,14 @@ module SapCommerceMcp
           LIMIT ?
         SQL
 
-        results.uniq { |r| r['id'] }
+        implementations.each do |row|
+          # Check if this class is already in results (edge case: class extends X and implements X)
+          unless results.any? { |r| r[:class_data]['id'] == row['id'] }
+            results << { class_data: row, relationship: 'implements' }
+          end
+        end
+
+        results
       end
 
       def find_usages(class_name, limit = 100)

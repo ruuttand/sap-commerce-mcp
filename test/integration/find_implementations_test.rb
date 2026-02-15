@@ -17,9 +17,13 @@ class FindImplementationsTest < Minitest::Test
     )
 
     assert_operator result['result_count'], :>=, 1
-    assert result.key?('implementations')
-    names = result['implementations'].map { |r| r['simple_name'] }
+    assert result.key?('results')
+    names = result['results'].map { |r| r['simple_name'] }
     assert_includes names, 'DefaultWarehouseAllocationService'
+
+    # Verify relationship type is present
+    impl = result['results'].find { |r| r['simple_name'] == 'DefaultWarehouseAllocationService' }
+    assert_equal 'implements', impl['relationship']
   end
 
   # --- Find implementations of a facade interface ---
@@ -33,7 +37,7 @@ class FindImplementationsTest < Minitest::Test
     )
 
     assert_operator result['result_count'], :>=, 1
-    names = result['implementations'].map { |r| r['simple_name'] }
+    names = result['results'].map { |r| r['simple_name'] }
     assert_includes names, 'DefaultKalmarReplacementPartsFacade'
   end
 
@@ -48,7 +52,7 @@ class FindImplementationsTest < Minitest::Test
     )
 
     # AbstractFraudCheckAction may have concrete implementations via parent_class
-    assert result.key?('implementations')
+    assert result.key?('results')
   end
 
   # --- Find implementations of KalmarB2BCustomerService ---
@@ -62,7 +66,7 @@ class FindImplementationsTest < Minitest::Test
     )
 
     assert_operator result['result_count'], :>=, 1
-    names = result['implementations'].map { |r| r['simple_name'] }
+    names = result['results'].map { |r| r['simple_name'] }
     assert_includes names, 'DefaultKalmarMachinePartsService'
   end
 
@@ -77,7 +81,7 @@ class FindImplementationsTest < Minitest::Test
     )
 
     assert_equal 0, result['result_count']
-    assert_empty result['implementations']
+    assert_empty result['results']
   end
 
   # --- Limit ---
@@ -104,16 +108,18 @@ class FindImplementationsTest < Minitest::Test
       )
     )
 
-    assert result.key?('interface')
+    assert result.key?('search_term')
     assert result.key?('result_count')
-    assert result.key?('implementations')
+    assert result.key?('results')
 
     if result['result_count'] > 0
-      impl = result['implementations'].first
+      impl = result['results'].first
       assert impl.key?('name')
       assert impl.key?('simple_name')
       assert impl.key?('type')
       assert impl.key?('extension')
+      assert impl.key?('relationship')
+      assert_includes ['extends', 'implements'], impl['relationship']
     end
   end
 
@@ -128,6 +134,25 @@ class FindImplementationsTest < Minitest::Test
       )
     )
 
-    assert_equal interface, result['interface']
+    assert_equal interface, result['search_term']
+  end
+
+  # --- Test extends relationship ---
+
+  def test_extends_relationship
+    result = parse_response(
+      SapCommerceMcp::Tools::FindImplementations.call(
+        class_or_interface: 'DefaultCommerceCartService',
+        server_context: server_context
+      )
+    )
+
+    # DefaultKalmarCommerceCartService extends DefaultCommerceCartService
+    names = result['results'].map { |r| r['simple_name'] }
+
+    if names.include?('DefaultKalmarCommerceCartService')
+      impl = result['results'].find { |r| r['simple_name'] == 'DefaultKalmarCommerceCartService' }
+      assert_equal 'extends', impl['relationship']
+    end
   end
 end
