@@ -37,7 +37,7 @@ module SapCommerceMcp
         properties: {
           class_or_interface: {
             type: 'string',
-            description: 'Fully qualified name of interface or class to find descendants of (what extends/implements it)'
+            description: 'Name of the interface or class (simple name or fully qualified) to find descendants of (what extends/implements it)'
           },
           limit: {
             type: 'integer',
