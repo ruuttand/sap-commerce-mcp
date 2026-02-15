@@ -6,12 +6,29 @@ module SapCommerceMcp
       title 'Get Class Signature'
 
       description <<~DESC
-        Get class API overview: methods, fields, annotations WITHOUT full source. Fast structure exploration.
+        Get class API overview: methods, fields, annotations, parent class, and interfaces WITHOUT reading full source.
+        Shows what THIS class extends/implements (ancestors), not what extends/implements it (descendants).
 
-        USE: "Show ProductService methods", "What's in DefaultCheckoutFacade?", "API of CartFacade"
-        NOT: full source→Read | finding class→SearchClasses
+        Use this when:
+        - Need to see class structure/API: "Show ProductService methods", "What's in DefaultCheckoutFacade?"
+        - Finding what a class extends: "What does KalmarCheckoutFacade extend?"
+        - Finding what a class implements: "What interfaces does DefaultCartService implement?"
+        - Quick method signature lookup without reading entire file
 
-        Returns: method signatures, field types, annotations (no method bodies). Use Read for implementation.
+        Examples:
+        - "Show methods in ProductService" → class_name: "ProductService"
+        - "What does DefaultKalmarCheckoutFacade extend?" → class_name: "DefaultKalmarCheckoutFacade"
+        - "API of CartFacade including parent methods" → class_name: "CartFacade", include_inherited: true
+        - "What interfaces does LoginController implement?" → class_name: "LoginController"
+
+        Don't use this for:
+        - Finding what implements/extends this class (use FindImplementations instead)
+        - Reading method implementations/code (use Read tool instead)
+        - Finding classes by name pattern (use SearchClasses instead)
+
+        Accepts simple names (e.g., "ProductModel") or fully qualified names. Returns error with candidates if ambiguous.
+        Returns: parent_class, interfaces array, methods with signatures, fields with types, class annotations.
+        Set include_inherited=true to recursively fetch parent class methods (up to 5 levels).
       DESC
 
       input_schema(
@@ -19,11 +36,11 @@ module SapCommerceMcp
         properties: {
           class_name: {
             type: 'string',
-            description: 'Fully qualified class name (e.g., de.hybris.platform.core.model.product.ProductModel)'
+            description: 'Class/interface name - accepts simple name (e.g., ProductModel) or fully qualified name. Returns error with candidates if ambiguous.'
           },
           include_inherited: {
             type: 'boolean',
-            description: 'Include methods from parent classes',
+            description: 'Include methods from parent classes recursively (follows parent_class chain up to 5 levels)',
             default: false
           }
         },

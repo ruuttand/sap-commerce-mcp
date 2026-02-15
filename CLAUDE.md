@@ -192,7 +192,11 @@ Search for Java classes by name pattern, with filters for extension, type, and a
 Get method signatures and structure of a specific class without loading the full file.
 
 ### 3. FindImplementations
-Find all classes that implement an interface or extend a class.
+Find all classes that implement an interface or extend a class. Results include a `relationship` field indicating whether each class:
+- **extends** the searched class (inheritance via parent_class)
+- **implements** the searched interface (via class_interfaces table)
+
+This distinction helps understand whether results are subclasses (inheritance) or interface implementations.
 
 ### 4. FindUsages
 Find all files that import or use a specific class.

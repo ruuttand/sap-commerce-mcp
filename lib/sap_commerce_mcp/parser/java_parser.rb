@@ -116,8 +116,8 @@ module SapCommerceMcp
           (class|interface|enum|@interface)\s+  # Type
           (\w+)  # Name
           (?:<[^>]+>)?  # Generic params
-          (?:\s+extends\s+([\w.<>,\s]+))?  # Extends
-          (?:\s+implements\s+([\w.<>,\s]+))?  # Implements
+          (?:\s+extends\s+([\w.<>,\s]+?)(?=\s+implements|\s*\{|$))?  # Extends (non-greedy, stops at implements)
+          (?:\s+implements\s+([\w.<>,\s]+?)(?=\s*\{|$))?  # Implements (non-greedy, stops at {)
         /mx
 
         if match = content_without_comments.match(pattern)
