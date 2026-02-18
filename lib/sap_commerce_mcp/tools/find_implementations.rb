@@ -27,7 +27,7 @@ module SapCommerceMcp
         - Finding which classes import a class (use FindUsages instead)
         - Finding dependency injection (use FindInjectedDependencies instead)
 
-        Returns classes AND interfaces with 'relationship' field indicating type:
+        RETURNS JSON: { class_or_interface, result_count, implementations: [{...class_data, relationship: 'extends'|'implements'}] }
         - 'extends': Result extends the search term (class→class or interface→interface)
         - 'implements': Result implements the search term (class→interface)
       DESC

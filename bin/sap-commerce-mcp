@@ -4,8 +4,8 @@
 require 'bundler/setup'
 require_relative '../lib/sap_commerce_mcp'
 
-# Get project path from command line
-project_path = ARGV[0] || Dir.pwd
+# Get project path from command line, environment variable, or current directory
+project_path = ARGV[0] || ENV['SAP_COMMERCE_PROJECT_PATH'] || Dir.pwd
 project_path = File.expand_path(project_path)
 
 warn "Starting SAP Commerce MCP Server..."
@@ -14,8 +14,22 @@ warn "Project: #{project_path}"
 # Ensure data directories exist
 SapCommerceMcp.ensure_data_dir!
 
+# Check parser selection: tree-sitter by default, regex as fallback or explicit opt-out
+use_regex_parser = ENV['SAP_MCP_USE_REGEX_PARSER'] == 'true'
+
+if use_regex_parser
+  use_tree_sitter = false
+  warn "Using regex parser (explicitly enabled)"
+elsif !defined?(TreeSitter)
+  warn "Warning: tree_sitter gem not available, falling back to regex parser"
+  use_tree_sitter = false
+else
+  use_tree_sitter = true
+  warn "Using tree-sitter Java parser (default)"
+end
+
 # Initialize indexer and audit logger
-indexer = SapCommerceMcp::Indexer.new(project_path)
+indexer = SapCommerceMcp::Indexer.new(project_path, use_tree_sitter: use_tree_sitter)
 audit_logger = SapCommerceMcp::Audit::Logger.new(project_path)
 
 # Build index if it doesn't exist

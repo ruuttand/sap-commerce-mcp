@@ -10,6 +10,7 @@ gem 'sqlite3', '~> 1.6'
 gem 'concurrent-ruby', '~> 1.2'
 gem 'nokogiri', '~> 1.15'
 gem 'logger', '~> 1.6' # Required explicitly in Ruby 3.5+
+gem 'ruby_tree_sitter', '~> 1.12', require: false  # Tree-sitter for POC (requires 'tree_sitter')
 
 group :development, :test do
   gem 'minitest', '~> 5.20'

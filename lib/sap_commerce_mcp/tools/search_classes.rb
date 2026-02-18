@@ -11,7 +11,7 @@ module SapCommerceMcp
         USE: "Find ProductService", "Show *Facade", "List *Controller in myext", "Find @Service classes"
         NOT: imports→FindUsages | injection→FindInjectedDependencies | subclasses→FindImplementations
 
-        Returns: location, type, extension (not source). Use Read/GetClassSignature for content.
+        RETURNS JSON: { query, filters, result_count, results: [{ name, simple_name, type, extension, file_path, parent_class?, is_item_model? }] }
       DESC
 
       input_schema(

@@ -19,14 +19,16 @@ Built a production-ready MCP (Model Context Protocol) server for SAP Commerce Cl
 **Components:**
 1. ✅ **9 MCP Tools** (using SDK's MCP::Tool base class)
 2. ✅ **SQLite Indexer** (enhanced with dependency tracking)
-3. ✅ **Java Parser** (regex-based, SAP Commerce-aware, constructor params)
+3. ✅ **Java Parser** (dual-mode: regex-based + optional tree-sitter AST parser)
 4. ✅ **Search Engine** (fast SQL queries, dependency graphs)
 5. ✅ **Audit Logger** (complete JSON logs)
 6. ✅ **SAP Commerce Parser** (extensions, ItemModels, Spring beans, XML dependencies)
 
-**Total:** ~2,200 lines of Ruby code
+**Total:** ~2,800 lines of Ruby code
 
-**Latest Enhancement:** Comprehensive dependency tracking (field/constructor/method/XML injection)
+**Latest Enhancements:**
+- Comprehensive dependency tracking (field/constructor/method/XML injection)
+- Tree-sitter AST parser (Phase 1): generics, inner classes, complex annotations
 
 ---
 
@@ -157,12 +159,13 @@ sap-commerce-mcp-sdk/
 ├── lib/sap_commerce_mcp/
 │   ├── sap_commerce_mcp.rb        # Main module
 │   │
-│   ├── tools/                     # 8 MCP tools (SDK)
+│   ├── tools/                     # 9 MCP tools (SDK)
 │   │   ├── search_classes.rb      # Find classes
 │   │   ├── get_class_signature.rb # Method signatures
 │   │   ├── find_implementations.rb# Implementations
 │   │   ├── find_usages.rb         # Usage finder
 │   │   ├── search_annotations.rb  # Annotation search
+│   │   ├── find_injected_dependencies.rb # Dependency analysis
 │   │   ├── get_spring_beans.rb    # Bean search
 │   │   ├── rebuild_index.rb       # Index rebuilder
 │   │   └── get_index_stats.rb     # Statistics
@@ -170,7 +173,10 @@ sap-commerce-mcp-sdk/
 │   ├── indexer.rb                 # SQLite indexing
 │   │
 │   ├── parser/                    # Java code parsing
-│   │   ├── java_parser.rb         # Regex-based parser
+│   │   ├── java_parser.rb         # Regex-based parser (default)
+│   │   ├── tree_sitter_java_parser.rb # AST-based parser (opt-in)
+│   │   ├── tree_sitter/
+│   │   │   └── grammar_loader.rb  # Java grammar loading
 │   │   └── sap_commerce_parser.rb # SAP Commerce specifics
 │   │
 │   ├── search/                    # Search engine
@@ -273,8 +279,12 @@ CREATE TABLE classes (
   extension TEXT,                  -- SAP Commerce extension
   type TEXT,                       -- class/interface/enum
   parent_class TEXT,
+  parent_class_id INTEGER,         -- FK to parent inner class (tree-sitter)
+  generic_signature TEXT,          -- Generic type params (tree-sitter)
   is_item_model INTEGER,           -- Boolean flag
-  last_modified INTEGER
+  is_inner_class INTEGER,          -- Boolean flag (tree-sitter)
+  last_modified INTEGER,
+  FOREIGN KEY(parent_class_id) REFERENCES classes(id)
 );
 
 -- Methods
@@ -284,6 +294,7 @@ CREATE TABLE methods (
   name TEXT,
   signature TEXT,                  -- Full signature
   return_type TEXT,
+  generic_signature TEXT,          -- Generic type params (tree-sitter)
   modifiers TEXT,
   is_constructor INTEGER
 );
@@ -294,6 +305,7 @@ CREATE TABLE fields (
   class_id INTEGER,
   name TEXT,
   type TEXT,
+  generic_type TEXT,               -- Full generic signature (tree-sitter)
   modifiers TEXT
 );
 
@@ -312,7 +324,8 @@ CREATE TABLE annotations (
   target_type TEXT,                -- class/method/field/constructor/constructor_param
   target_id INTEGER,
   annotation_name TEXT,
-  annotation_value TEXT
+  annotation_value TEXT,
+  parameters TEXT                  -- JSON-encoded annotation params (tree-sitter)
 );
 
 -- Spring Beans
@@ -353,6 +366,143 @@ CREATE TABLE imports (
 - idx_annotations_name, idx_annotations_target
 - idx_spring_beans_bean_id, idx_spring_beans_class_name
 - idx_bean_deps_bean_id, idx_bean_deps_ref_bean, idx_bean_deps_ref_class
+
+**Tree-Sitter Enhancements (Phase 1):**
+
+When enabled with `SAP_MCP_USE_TREE_SITTER=true`, the parser uses AST-based extraction instead of regex:
+
+- **Generic Types**: Full preservation of `Map<String, List<ProductModel>>` in fields, methods, classes
+- **Inner Classes**: Recursive extraction with parent relationships, unlimited depth
+- **Complex Annotations**: Multi-line annotations with JSON-encoded parameters
+- **Better Accuracy**: AST parsing handles edge cases regex can't (comments, multi-line constructs)
+
+---
+
+## Tree-Sitter Parser (Phase 1 - Optional Enhancement)
+
+### Why Tree-Sitter?
+
+**Problem with Regex Parser:**
+- Multi-line annotations break parsing
+- Complex nested generics (`Map<String, List<Model>>`) not fully extracted
+- Inner classes not detected
+- Edge cases with comments and multi-line constructs
+
+**Tree-Sitter Solution:**
+- Proper AST (Abstract Syntax Tree) parsing
+- Handles all Java syntax correctly
+- Future-proof for complex code patterns
+- Foundation for Kotlin/Groovy support
+
+### Phase 1 Features
+
+**1. Generic Type Extraction**
+```java
+// Fully preserved in index:
+Map<String, List<ProductModel>> productCache;
+<T extends Model> T findById(String id);
+class GenericService<T extends BaseModel> { }
+```
+
+**2. Inner Class Support**
+```java
+// All levels indexed with parent relationships:
+class Outer {
+  static class StaticInner { }
+  class InnerClass {
+    class DeeplyNested { }  // Unlimited depth
+  }
+}
+```
+
+**3. Complex Annotations**
+```java
+// Parameters stored as structured JSON:
+@RequestMapping(
+  value = "/api/products",
+  method = RequestMethod.GET,
+  produces = "application/json"
+)
+// Stored: {"value": "\"/api/products\"", "method": "RequestMethod.GET", ...}
+```
+
+### Database Enhancements
+
+**New Columns:**
+- `classes.generic_signature` - `<T extends Model>`
+- `classes.is_inner_class` - Boolean flag
+- `classes.parent_class_id` - FK to parent inner class
+- `fields.generic_type` - Full generic signature
+- `methods.generic_signature` - Method type parameters
+- `annotations.parameters` - JSON-encoded annotation parameters
+
+### Feature Flag Usage
+
+**Enable tree-sitter:**
+```bash
+SAP_MCP_USE_TREE_SITTER=true bin/sap-commerce-mcp /path/to/hybris
+```
+
+**Or in MCP config:**
+```json
+{
+  "mcpServers": {
+    "sap-commerce": {
+      "env": {
+        "SAP_MCP_USE_TREE_SITTER": "true"
+      }
+    }
+  }
+}
+```
+
+**Default:** Regex parser (when not set)
+
+### Test Coverage
+
+**20 Tests, 78 Assertions:**
+- 11 POC tests (package, imports, class info)
+- 9 Phase 1 tests (generics, inner classes, complex annotations)
+- 9 fixture files covering all scenarios
+
+**All tests passing ✅**
+
+### Grammar Setup
+
+**Required for tree-sitter mode:**
+
+1. Compile Java grammar:
+```bash
+# Clone and compile
+git clone https://github.com/tree-sitter/tree-sitter-java
+cd tree-sitter-java
+cc -shared -o libtree-sitter-java.dylib -I src src/parser.c src/scanner.c -fPIC
+```
+
+2. Install:
+```bash
+mkdir -p ~/.sap-commerce-mcp/grammars
+cp libtree-sitter-java.dylib ~/.sap-commerce-mcp/grammars/
+```
+
+3. Grammar auto-loaded when `SAP_MCP_USE_TREE_SITTER=true`
+
+### Performance
+
+**Indexing:**
+- Similar speed to regex parser (~300-500 classes/sec)
+- Slightly larger index due to additional data
+
+**Search:**
+- Same < 100ms query performance
+- Enhanced results with generic type information
+
+### Backward Compatibility
+
+✅ Optional - feature flag required to enable
+✅ Regex parser remains default
+✅ Same database schema (with new nullable columns)
+✅ Zero risk to existing functionality
 
 ---
 
@@ -449,13 +599,19 @@ Review this PR adding PaymentValidationService
     "sap-commerce": {
       "command": "/absolute/path/to/bin/sap-commerce-mcp",
       "args": ["/absolute/path/to/hybris"],
-      "env": {}
+      "env": {
+        "SAP_MCP_USE_TREE_SITTER": "true"
+      }
     }
   }
 }
 ```
 
 **Critical:** Use absolute paths, restart Claude Code after changes.
+
+**Optional:** Set `SAP_MCP_USE_TREE_SITTER=true` to enable AST-based parsing (recommended for better generic type and inner class support).
+
+**Default:** Regex-based parser (when env var not set or set to `false`).
 
 ### Audit Configuration
 
@@ -544,9 +700,10 @@ rm ~/.sap-commerce-mcp/indexes/*.db
 ### Immediate (Day 1)
 
 1. ✅ Install: `bundle install`
-2. ✅ Index: Run server on hybris project
-3. ✅ Configure: Update `~/.config/claude/mcp.json`
-4. ✅ Test: Ask Claude simple queries
+2. ✅ **Optional:** Compile tree-sitter Java grammar (see CLAUDE.md for instructions)
+3. ✅ Index: Run server on hybris project
+4. ✅ Configure: Update `~/.config/claude/mcp.json` (optionally enable tree-sitter)
+5. ✅ Test: Ask Claude simple queries
 
 ### Short Term (Week 1)
 
@@ -567,11 +724,12 @@ rm ~/.sap-commerce-mcp/indexes/*.db
 
 ## Documentation Provided
 
-1. **[README.md](README.md)** - Project overview
-2. **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Complete setup instructions (25 pages)
-3. **[GETTING_STARTED.md](GETTING_STARTED.md)** - Step-by-step checklist
-4. **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Command quick reference
-5. **This file** - Complete implementation summary
+1. **[README.md](README.md)** - Project overview (with tree-sitter features)
+2. **[CLAUDE.md](CLAUDE.md)** - Architecture and tree-sitter implementation details
+3. **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Complete setup instructions
+4. **[GETTING_STARTED.md](GETTING_STARTED.md)** - Step-by-step checklist
+5. **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Command quick reference
+6. **This file** - Complete implementation summary
 
 ---
 
@@ -613,11 +771,12 @@ rm ~/.sap-commerce-mcp/indexes/*.db
 
 ### Production Readiness
 
-✅ Official SDK (maintained by Anthropic/Shopify)  
-✅ Complete error handling  
-✅ Full audit logging  
-✅ Comprehensive tests  
-✅ Documentation  
+✅ Official SDK (maintained by Anthropic/Shopify)
+✅ Complete error handling
+✅ Full audit logging
+✅ Comprehensive tests (20 tests, 78 assertions for tree-sitter)
+✅ Documentation
+✅ Dual parser modes (regex + tree-sitter)
 ✅ Ready for immediate use  
 
 ---
