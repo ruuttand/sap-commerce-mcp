@@ -7,10 +7,11 @@ module SapCommerceMcp
   class Indexer
     attr_reader :project_path, :db_path, :db
 
-    def initialize(project_path)
+    def initialize(project_path, use_tree_sitter: false)
       @project_path = File.expand_path(project_path)
-      @parser = Parser::SapCommerceParser.new(@project_path)
-      
+      @use_tree_sitter = use_tree_sitter
+      @parser = Parser::SapCommerceParser.new(@project_path, use_tree_sitter: @use_tree_sitter)
+
       # Create index database in user's data directory
       project_hash = Digest::MD5.hexdigest(@project_path)[0..8]
       @db_path = File.join(SapCommerceMcp.data_dir, 'indexes', "#{project_hash}.db")
@@ -123,8 +124,12 @@ module SapCommerceMcp
           extension TEXT,
           type TEXT NOT NULL,
           parent_class TEXT,
+          parent_class_id INTEGER,
+          generic_signature TEXT,
           is_item_model INTEGER DEFAULT 0,
-          last_modified INTEGER
+          is_inner_class INTEGER DEFAULT 0,
+          last_modified INTEGER,
+          FOREIGN KEY(parent_class_id) REFERENCES classes(id)
         );
 
         CREATE INDEX idx_classes_name ON classes(name);
@@ -147,6 +152,7 @@ module SapCommerceMcp
           name TEXT NOT NULL,
           signature TEXT NOT NULL,
           return_type TEXT,
+          generic_signature TEXT,
           modifiers TEXT,
           is_constructor INTEGER DEFAULT 0,
           FOREIGN KEY(class_id) REFERENCES classes(id)
@@ -160,6 +166,7 @@ module SapCommerceMcp
           class_id INTEGER,
           name TEXT NOT NULL,
           type TEXT NOT NULL,
+          generic_type TEXT,
           modifiers TEXT,
           FOREIGN KEY(class_id) REFERENCES classes(id)
         );
@@ -173,7 +180,8 @@ module SapCommerceMcp
           target_type TEXT,
           target_id INTEGER,
           annotation_name TEXT NOT NULL,
-          annotation_value TEXT
+          annotation_value TEXT,
+          parameters TEXT
         );
 
         CREATE INDEX idx_annotations_name ON annotations(annotation_name);
@@ -254,22 +262,70 @@ module SapCommerceMcp
       parsed = @parser.parse_java_file(file_path)
       return unless parsed && parsed[:class_info]
 
-      class_info = parsed[:class_info]
       package = parsed[:package]
+
+      # Index main class
+      main_class_id = index_class_data(
+        parsed[:class_info], parsed[:methods], parsed[:fields],
+        parsed[:annotations], parsed[:constructor_params],
+        package, file_path, extension_name, nil, nil, stats
+      )
+
+      # Index imports for main class
+      parsed[:imports]&.each do |import|
+        @db.execute('INSERT INTO imports (class_id, imported_class) VALUES (?, ?)',
+                   main_class_id, import)
+      end
+
+      # Index inner classes recursively
+      parsed[:inner_classes]&.each do |inner_class_data|
+        index_inner_class(inner_class_data, package, file_path, extension_name, main_class_id, stats)
+      end
+
+    rescue => e
+      warn "Error indexing #{file_path}: #{e.message}"
+    end
+
+    def index_inner_class(class_data, package, file_path, extension_name, parent_id, stats)
+      class_info = class_data[:class_info]
+
+      # Index this inner class
+      class_id = index_class_data(
+        class_info, class_data[:methods], class_data[:fields],
+        class_data[:annotations], class_data[:constructor_params],
+        package, file_path, extension_name, parent_id, class_info[:parent_class_name], stats
+      )
+
+      # Recursively index any nested inner classes
+      class_data[:inner_classes]&.each do |nested_class_data|
+        index_inner_class(nested_class_data, package, file_path, extension_name, class_id, stats)
+      end
+
+      class_id
+    end
+
+    def index_class_data(class_info, methods, fields, annotations, constructor_params,
+                         package, file_path, extension_name, parent_class_id, parent_class_name, stats)
       full_name = package ? "#{package}.#{class_info[:name]}" : class_info[:name]
 
-      # Insert class
+      # Determine if this is an ItemModel (SAP Commerce data model)
+      # Criteria: class name ends with "Model" AND parent class contains "ItemModel"
+      is_item_model = class_info[:name].end_with?('Model') &&
+                      class_info[:extends]&.include?('ItemModel')
+
+      # Insert class with Phase 1 enhancements
       @db.execute(
         <<~SQL,
           INSERT INTO classes (name, simple_name, package, file_path, extension, type,
-                              parent_class, is_item_model, last_modified)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              parent_class, parent_class_id, generic_signature,
+                              is_item_model, is_inner_class, last_modified)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         SQL
         full_name, class_info[:name], package || '', file_path, extension_name,
-        class_info[:type], class_info[:extends], parsed[:is_item_model] ? 1 : 0,
-        File.mtime(file_path).to_i
+        class_info[:type], class_info[:extends], parent_class_id, class_info[:generic_signature],
+        is_item_model ? 1 : 0, class_info[:is_inner_class] ? 1 : 0, File.mtime(file_path).to_i
       )
-      
+
       class_id = @db.last_insert_row_id
       stats[:classes_count] += 1
 
@@ -279,71 +335,85 @@ module SapCommerceMcp
                    class_id, interface.strip)
       end
 
-      # Insert methods
-      parsed[:methods]&.each do |method|
+      # Insert methods with generic signatures
+      methods&.each do |method|
         @db.execute(
           <<~SQL,
-            INSERT INTO methods (class_id, name, signature, return_type, modifiers, is_constructor)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO methods (class_id, name, signature, return_type, generic_signature, modifiers, is_constructor)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
           SQL
           class_id, method[:name], method[:signature], method[:return_type],
-          method[:modifiers].join(' '), method[:is_constructor] ? 1 : 0
+          method[:generic_signature], method[:modifiers]&.join(' '), method[:is_constructor] ? 1 : 0
         )
 
         method_id = @db.last_insert_row_id
         stats[:methods_count] += 1
 
-        # Insert method annotations
+        # Insert method annotations with parameters
         method[:annotations]&.each do |annotation|
-          @db.execute('INSERT INTO annotations (target_type, target_id, annotation_name) VALUES (?, ?, ?)',
-                     'method', method_id, annotation)
+          @db.execute(
+            <<~SQL,
+              INSERT INTO annotations (target_type, target_id, annotation_name, annotation_value, parameters)
+              VALUES (?, ?, ?, ?, ?)
+            SQL
+            'method', method_id, annotation[:name], annotation[:value], annotation[:parameters]
+          )
           stats[:annotations_count] += 1
         end
       end
 
-      # Insert fields
-      parsed[:fields]&.each do |field|
+      # Insert fields with generic types
+      fields&.each do |field|
         @db.execute(
           <<~SQL,
-            INSERT INTO fields (class_id, name, type, modifiers)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO fields (class_id, name, type, generic_type, modifiers)
+            VALUES (?, ?, ?, ?, ?)
           SQL
-          class_id, field[:name], field[:type], field[:modifiers].join(' ')
+          class_id, field[:name], field[:type], field[:generic_type], field[:modifiers]&.join(' ')
         )
 
         field_id = @db.last_insert_row_id
         stats[:fields_count] += 1
 
-        # Insert field annotations
+        # Insert field annotations with parameters
         field[:annotations]&.each do |annotation|
-          @db.execute('INSERT INTO annotations (target_type, target_id, annotation_name, annotation_value) VALUES (?, ?, ?, ?)',
-                     'field', field_id, annotation[:name], annotation[:value])
+          @db.execute(
+            <<~SQL,
+              INSERT INTO annotations (target_type, target_id, annotation_name, annotation_value, parameters)
+              VALUES (?, ?, ?, ?, ?)
+            SQL
+            'field', field_id, annotation[:name], annotation[:value], annotation[:parameters]
+          )
           stats[:annotations_count] += 1
         end
       end
 
-      # Insert class annotations
-      parsed[:annotations]&.each do |annotation|
-        @db.execute('INSERT INTO annotations (target_type, target_id, annotation_name, annotation_value) VALUES (?, ?, ?, ?)',
-                   'class', class_id, annotation[:name], annotation[:value])
+      # Insert class annotations with parameters
+      annotations&.each do |annotation|
+        @db.execute(
+          <<~SQL,
+            INSERT INTO annotations (target_type, target_id, annotation_name, annotation_value, parameters)
+            VALUES (?, ?, ?, ?, ?)
+          SQL
+          'class', class_id, annotation[:name], annotation[:value], annotation[:parameters]
+        )
         stats[:annotations_count] += 1
       end
 
-      # Insert imports
-      parsed[:imports]&.each do |import|
-        @db.execute('INSERT INTO imports (class_id, imported_class) VALUES (?, ?)',
-                   class_id, import)
-      end
-
       # Insert constructor parameters
-      parsed[:constructor_params]&.each do |constructor_info|
+      constructor_params&.each do |constructor_info|
         # Only store if constructor has injection annotation
         next unless constructor_info[:has_injection_annotation]
 
         # Store constructor-level annotations
         constructor_info[:constructor_annotations]&.each do |annotation|
-          @db.execute('INSERT INTO annotations (target_type, target_id, annotation_name, annotation_value) VALUES (?, ?, ?, ?)',
-                     'constructor', class_id, annotation[:name], annotation[:value])
+          @db.execute(
+            <<~SQL,
+              INSERT INTO annotations (target_type, target_id, annotation_name, annotation_value, parameters)
+              VALUES (?, ?, ?, ?, ?)
+            SQL
+            'constructor', class_id, annotation[:name], annotation[:value], annotation[:parameters]
+          )
           stats[:annotations_count] += 1
         end
 
@@ -361,15 +431,19 @@ module SapCommerceMcp
 
           # Store parameter annotations (e.g., @Qualifier)
           param[:annotations]&.each do |annotation|
-            @db.execute('INSERT INTO annotations (target_type, target_id, annotation_name, annotation_value) VALUES (?, ?, ?, ?)',
-                       'constructor_param', param_id, annotation[:name], annotation[:value])
+            @db.execute(
+              <<~SQL,
+                INSERT INTO annotations (target_type, target_id, annotation_name, annotation_value, parameters)
+                VALUES (?, ?, ?, ?, ?)
+              SQL
+              'constructor_param', param_id, annotation[:name], annotation[:value], annotation[:parameters]
+            )
             stats[:annotations_count] += 1
           end
         end
       end
 
-    rescue => e
-      warn "Error indexing #{file_path}: #{e.message}"
+      class_id
     end
 
     def index_spring_file(file_path, extension_name, stats)

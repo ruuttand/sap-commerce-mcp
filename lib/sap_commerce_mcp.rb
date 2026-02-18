@@ -14,6 +14,15 @@ require_relative 'sap_commerce_mcp/search/query_processor'
 require_relative 'sap_commerce_mcp/search/result_formatter'
 require_relative 'sap_commerce_mcp/audit/logger'
 
+# Conditionally load tree-sitter parser if gem is available
+begin
+  require 'tree_sitter'
+  require_relative 'sap_commerce_mcp/parser/tree_sitter/grammar_loader'
+  require_relative 'sap_commerce_mcp/parser/tree_sitter_java_parser'
+rescue LoadError
+  # tree_sitter gem not available, tree-sitter parser will not be available
+end
+
 module SapCommerceMcp
   class Error < StandardError; end
 
@@ -29,6 +38,7 @@ module SapCommerceMcp
     FileUtils.mkdir_p(data_dir)
     FileUtils.mkdir_p(File.join(data_dir, 'logs'))
     FileUtils.mkdir_p(File.join(data_dir, 'indexes'))
+    FileUtils.mkdir_p(File.join(data_dir, 'grammars'))
   end
 end
 

@@ -6,9 +6,16 @@ require 'set'
 module SapCommerceMcp
   module Parser
     class SapCommerceParser
-      def initialize(project_path)
+      def initialize(project_path, use_tree_sitter: false)
         @project_path = project_path
-        @java_parser = JavaParser.new
+        @use_tree_sitter = use_tree_sitter
+
+        # Choose parser based on flag and availability
+        if @use_tree_sitter && defined?(TreeSitterJavaParser)
+          @java_parser = TreeSitterJavaParser.new
+        else
+          @java_parser = JavaParser.new
+        end
       end
 
       def parse_java_file(file_path)
@@ -75,6 +82,22 @@ module SapCommerceMcp
                 path: extension_path
               }
             end
+          end
+        end
+
+        # Always scan platform bootstrap (contains generated ItemModels)
+        bootstrap_paths = [
+          File.join(@project_path, 'bin', 'platform', 'bootstrap'),
+          File.join(@project_path, 'hybris', 'bin', 'platform', 'bootstrap')
+        ]
+
+        bootstrap_paths.each do |bootstrap_path|
+          if File.directory?(bootstrap_path) && !seen_paths.include?(bootstrap_path)
+            seen_paths << bootstrap_path
+            extensions << {
+              name: 'platform_bootstrap',
+              path: bootstrap_path
+            }
           end
         end
 

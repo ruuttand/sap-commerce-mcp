@@ -3,36 +3,91 @@
 ## Installation (One Time)
 
 ```bash
-cd sap-commerce-mcp-sdk
+cd sap-commerce-mcp
 bundle install
 gem install mcp
 chmod +x bin/sap-commerce-mcp
 ```
 
-## First Run
+### Optional: Tree-Sitter Parser (Recommended)
+
+For better generic type and inner class support:
 
 ```bash
+# 1. Compile Java grammar
+git clone https://github.com/tree-sitter/tree-sitter-java
+cd tree-sitter-java
+cc -shared -o libtree-sitter-java.dylib -I src src/parser.c src/scanner.c -fPIC
+
+# 2. Install grammar
+mkdir -p ~/.sap-commerce-mcp/grammars
+cp libtree-sitter-java.dylib ~/.sap-commerce-mcp/grammars/
+
+# 3. Enable in config (see below)
+```
+
+## First Run (Manual Testing - Optional)
+
+This is only for manual testing. Skip to Configuration to use with Claude Code.
+
+```bash
+# Standard (regex parser)
 bin/sap-commerce-mcp /path/to/hybris
+
+# Enhanced (tree-sitter parser - requires grammar setup)
+SAP_MCP_USE_TREE_SITTER=true bin/sap-commerce-mcp /path/to/hybris
+
 # Wait for index build (30-120s)
 # Server ready when you see: "Ready to receive MCP requests"
 ```
+
+**Note:** When running via Claude Code, the environment variable is set in the MCP config - you don't need to pass it manually.
 
 ## Claude Code Configuration
 
 **File:** `~/.config/claude/mcp.json`
 
+### Standard Configuration (Regex Parser)
 ```json
 {
   "mcpServers": {
     "sap-commerce": {
-      "command": "/FULL/PATH/sap-commerce-mcp-sdk/bin/sap-commerce-mcp",
+      "command": "/FULL/PATH/sap-commerce-mcp/bin/sap-commerce-mcp",
       "args": ["/FULL/PATH/to/hybris"]
     }
   }
 }
 ```
 
-**Important:** Use full absolute paths, restart Claude Code after changes.
+### Enhanced Configuration (Tree-Sitter Parser - Recommended)
+```json
+{
+  "mcpServers": {
+    "sap-commerce": {
+      "command": "/FULL/PATH/sap-commerce-mcp/bin/sap-commerce-mcp",
+      "args": ["/FULL/PATH/to/hybris"],
+      "env": {
+        "SAP_MCP_USE_TREE_SITTER": "true"
+      }
+    }
+  }
+}
+```
+
+**Important:**
+- Use full absolute paths, restart Claude Code after changes
+- **The env var here is all you need** - Claude Code passes it to the server automatically
+- Don't set it manually when running via Claude Code
+
+## Parser Modes
+
+| Feature | Regex Parser (Default) | Tree-Sitter Parser (Recommended) |
+|---------|----------------------|----------------------------------|
+| Generic types | Partial | ✅ Full: `Map<String, List<Model>>` |
+| Inner classes | ❌ Not detected | ✅ All levels with parent links |
+| Complex annotations | ❌ Single line only | ✅ Multi-line with parameters |
+| Edge cases | ⚠️ May fail | ✅ AST-based, robust |
+| **Enable with** | Default | `SAP_MCP_USE_TREE_SITTER=true` |
 
 ## Common Claude Questions
 
@@ -99,6 +154,17 @@ bundle install
 ruby -c bin/sap-commerce-mcp
 ```
 
+### Tree-Sitter Grammar Not Found
+```bash
+# Check grammar exists
+ls -l ~/.sap-commerce-mcp/grammars/libtree-sitter-java.dylib
+
+# If missing, compile and install (see Optional setup above)
+
+# Or disable tree-sitter
+# Remove SAP_MCP_USE_TREE_SITTER from env config
+```
+
 ### Claude Not Using MCP
 ```bash
 # Validate JSON
@@ -160,6 +226,7 @@ If something's not working:
 - [ ] `mcp.json` valid JSON?
 - [ ] Claude Code restarted after config change?
 - [ ] Logs show tool calls? (tail the audit log)
+- [ ] Tree-sitter grammar installed? (if using `SAP_MCP_USE_TREE_SITTER=true`)
 
 ## Quick Tests
 

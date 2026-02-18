@@ -146,7 +146,11 @@ module SapCommerceMcp
 
       def find_usages(class_name, limit = 100)
         # Find files that import this class
-        pattern = "#{class_name.split('.').last}%"
+        # Support both fully qualified names and simple names
+        # Pattern matches FQNs ending with the simple name (e.g., "%.ProductModel")
+        simple_name = class_name.split('.').last
+        pattern = "%.#{simple_name}"
+
         @db.execute(<<~SQL, class_name, pattern, limit)
           SELECT DISTINCT c.name, c.file_path, c.extension
           FROM classes c
@@ -199,15 +203,31 @@ module SapCommerceMcp
         from_parts = ['FROM classes c']
         where_parts = []
         params = []
+        order_by = 'c.simple_name'
 
         # Build search condition
         if query.include?('*')
+          # Wildcard pattern match
           where_parts << 'c.name LIKE ? OR c.simple_name LIKE ?'
           pattern = convert_pattern(query)
           params << pattern << pattern
         else
-          where_parts << '(c.name LIKE ? OR c.simple_name LIKE ?)'
-          params << "%#{query}%" << "%#{query}%"
+          # Smart match: exact, ends-with, or contains
+          # Priority: exact match > ends with query > contains query
+          where_parts << '(c.simple_name = ? OR c.name = ? OR c.simple_name LIKE ? OR c.name LIKE ?)'
+          params << query << query << "%.#{query}" << "%#{query}%"
+
+          # Order by match quality: exact first, then ends-with, then contains
+          order_by = <<~SQL.strip
+            CASE
+              WHEN c.simple_name = ? THEN 1
+              WHEN c.name = ? THEN 2
+              WHEN c.simple_name LIKE ? THEN 3
+              WHEN c.name LIKE ? THEN 4
+              ELSE 5
+            END, c.simple_name
+          SQL
+          params << query << query << "%.#{query}" << "%#{query}%"
         end
 
         # Add filters
@@ -235,7 +255,7 @@ module SapCommerceMcp
         # Combine SQL
         sql = sql_parts.join(' ') + ' ' + from_parts.join(' ')
         sql += ' WHERE ' + where_parts.join(' AND ') unless where_parts.empty?
-        sql += ' ORDER BY c.simple_name LIMIT ?'
+        sql += " ORDER BY #{order_by} LIMIT ?"
         params << limit
 
         { query: sql, params: params }

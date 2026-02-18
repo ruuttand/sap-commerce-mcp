@@ -9,11 +9,23 @@ Fast code indexing and search for SAP Commerce Cloud projects using the official
 bundle install
 gem install mcp
 
-# 2. Index your project
+# 2. Index your project (choose one method)
+# Method A: Direct path argument
 bin/sap-commerce-mcp /path/to/hybris
 
-# 3. Configure Claude Code (~/.config/claude/mcp.json)
+# Method B: Environment variable
+export SAP_COMMERCE_PROJECT_PATH="/path/to/hybris"
+bin/sap-commerce-mcp
+
+# Method C: Current directory
+cd /path/to/hybris && bin/sap-commerce-mcp
+
+# 3. Configure Claude Code (choose one method)
+# Method A: With path argument
 claude mcp add sap-commerce --scope user -- /full/path/sap-commerce-mcp/bin/sap-commerce-mcp /full/path/hybris
+
+# Method B: With environment variable
+claude mcp add sap-commerce --scope user --env SAP_COMMERCE_PROJECT_PATH=/path/to/hybris -- /full/path/sap-commerce-mcp/bin/sap-commerce-mcp
 
 # 4. Restart Claude Code and start using!
 ```
@@ -29,6 +41,28 @@ See **[SETUP_GUIDE.md](SETUP_GUIDE.md)** for complete instructions.
 - 🏗️ **SAP Commerce-Aware** - ItemModels, extensions, hybris patterns, full DI tracking
 - 🛠️ **Official SDK** - Built with Anthropic/Shopify Ruby SDK
 - 💾 **SQLite Index** - Fast queries (< 100ms)
+
+### 🚀 NEW: Tree-Sitter Enhanced Parsing (Optional)
+
+Enable with `SAP_MCP_USE_TREE_SITTER=true` for advanced code intelligence:
+
+- 🧬 **Generic Type Extraction** - Full support for `Map<String, List<Product>>`
+- 📦 **Inner Classes** - Extract nested classes with unlimited depth
+- 📝 **Complex Annotations** - Multi-line `@RequestMapping` with full parameters
+- 🎯 **Better Accuracy** - AST-based parsing handles edge cases regex can't
+
+```bash
+# Enable tree-sitter parser
+SAP_MCP_USE_TREE_SITTER=true bin/sap-commerce-mcp /path/to/hybris
+```
+
+**What you get:**
+- All generic type information preserved (`Map<String, List<ProductModel>>`)
+- Inner class hierarchy fully mapped
+- Annotation parameters stored as structured JSON
+- Robust handling of multi-line constructs
+
+See [Phase 1 documentation in CLAUDE.md](CLAUDE.md#tree-sitter-parser-phase-1-enhancements) for details.
 
 ## 📋 Use Cases
 

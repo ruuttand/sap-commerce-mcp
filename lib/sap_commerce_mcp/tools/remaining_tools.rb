@@ -9,10 +9,13 @@ module SapCommerceMcp
       description <<~DESC
         Find classes that IMPORT a specific class (compile-time dependency). Searches imports table.
 
+        Accepts both fully qualified names (e.g., de.hybris.platform.core.model.product.ProductModel)
+        and simple names (e.g., ProductModel). Simple names may match multiple imports if ambiguous.
+
         USE: "What imports ProductService?", "Find compile-time references to CheckoutFacade"
         NOT: runtime injection→FindInjectedDependencies (better for SAP Commerce) | subclasses→FindImplementations
 
-        Returns: classes that have import statements for the target class.
+        RETURNS JSON: { class, result_count, usages: [{name, file_path, extension}] }
       DESC
 
       input_schema(
@@ -20,7 +23,7 @@ module SapCommerceMcp
         properties: {
           class_name: {
             type: 'string',
-            description: 'Fully qualified class name'
+            description: 'Class name (accepts both fully qualified or simple names like "ProductModel")'
           },
           limit: {
             type: 'integer',
@@ -75,7 +78,7 @@ module SapCommerceMcp
         USE: "Find @Controller classes", "Show @Autowired methods", "List @Service annotated"
         Common: @Service, @Controller, @Component, @Repository, @Autowired, @Resource
 
-        Returns: annotated elements grouped by type. Set target_type to filter: class/method/field/all.
+        RETURNS JSON: { annotation, target_type, result_count, results: { classes: [...], methods: [...], fields: [...] } } or single array if target_type specified
       DESC
 
       input_schema(
@@ -152,7 +155,7 @@ module SapCommerceMcp
         USE: "Find bean checkoutService", "Show *Facade beans", "Beans in commerceservices"
         NOT: field injection→FindInjectedDependencies | classes→SearchClasses
 
-        Returns: bean ID, class, scope, extension, parent bean.
+        RETURNS JSON: { pattern, extension?, result_count, beans: [{bean_id, class_name, parent_bean?, scope?, extension, file_path}] }
       DESC
 
       input_schema(
@@ -227,8 +230,8 @@ module SapCommerceMcp
             description: 'Force full reindex even if index exists',
             default: false
           }
-        },
-        required: []
+        }
+        # required omitted - all parameters are optional
       )
 
       class << self
@@ -282,8 +285,8 @@ module SapCommerceMcp
             description: 'Unused parameter for schema compatibility',
             default: false
           }
-        },
-        required: []
+        }
+        # required omitted - all parameters are optional
       )
 
       class << self

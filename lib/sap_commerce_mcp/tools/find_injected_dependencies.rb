@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'json'
+
 module SapCommerceMcp
   module Tools
     class FindInjectedDependencies < MCP::Tool
@@ -21,7 +23,9 @@ module SapCommerceMcp
         USE: "What services does DefaultCheckoutFacade use?", "What injects CheckoutService?", "Show dependencies of X"
         NOT: imports→FindUsages | bean lookup→GetSpringBeans | subclasses→FindImplementations
 
-        Returns: Complete dependency graph with injection type, field/param names, annotations. Filter by annotation: Autowired/Resource/Inject.
+        RETURNS JSON:
+        - Mode 1 (class_name): { class_name, result_count, dependencies: [{dependency_name, dependency_type, injection_type, annotations, class_name, extension}] }
+        - Mode 2 (injected_type): { injected_type, result_count, injections: [{class_name, simple_name, extension, file_path, dependency_name, dependency_type, injection_type, annotations}] }
       DESC
 
       input_schema(
@@ -44,8 +48,8 @@ module SapCommerceMcp
             description: 'Maximum number of results (default: 100)',
             default: 100
           }
-        },
-        required: []
+        }
+        # required omitted - all parameters are optional (but at least one of class_name/injected_type must be provided)
       )
 
       class << self
@@ -59,15 +63,24 @@ module SapCommerceMcp
             db = indexer.db
 
             results = []
+            formatted_results = {}
 
             if class_name
               # Find dependencies injected INTO this class
               results = find_dependencies_of_class(db, class_name, annotation, limit)
-              result_text = format_dependencies_of_class(class_name, results)
+              formatted_results = {
+                class_name: class_name,
+                result_count: results.size,
+                dependencies: results
+              }
             elsif injected_type
               # Find classes that inject this type
               results = find_classes_injecting_type(db, injected_type, annotation, limit)
-              result_text = format_classes_injecting_type(injected_type, results)
+              formatted_results = {
+                injected_type: injected_type,
+                result_count: results.size,
+                injections: results
+              }
             else
               return error_response('Must specify either class_name or injected_type')
             end
@@ -82,7 +95,7 @@ module SapCommerceMcp
 
             MCP::Tool::Response.new([{
               type: 'text',
-              text: result_text
+              text: JSON.pretty_generate(formatted_results)
             }])
           rescue => e
             audit_logger&.log_error('find_injected_dependencies', e)
@@ -368,68 +381,6 @@ module SapCommerceMcp
           params = ["%#{injected_type}%", "%#{injected_type}%"]
 
           db.execute(query, params)
-        end
-
-        def format_dependencies_of_class(class_name, results)
-          return "No injected dependencies found for class: #{class_name}" if results.empty?
-
-          output = ["# Injected Dependencies for: #{class_name}", ""]
-          output << "Found #{results.size} injected dependency/dependencies:"
-          output << ""
-
-          # Group by injection type
-          by_type = results.group_by { |r| r['injection_type'] }
-
-          by_type.each do |injection_type, deps|
-            output << "## #{injection_type} Injection (#{deps.size})"
-            output << ""
-
-            deps.each do |row|
-              output << "### #{row['dependency_name']}"
-              output << "- Type: #{row['dependency_type']}"
-              output << "- Modifiers: #{row['modifiers']}" if row['modifiers'] && !row['modifiers'].empty?
-              output << "- Annotations: #{row['annotations']}" if row['annotations']
-              output << "- Bean ID: #{row['bean_id']}" if row['bean_id']
-              output << "- XML Type: #{row['xml_dep_type']}" if row['xml_dep_type']
-              output << "- Extension: #{row['extension']}" if row['extension']
-              output << ""
-            end
-          end
-
-          output.join("\n")
-        end
-
-        def format_classes_injecting_type(injected_type, results)
-          return "No classes found injecting type: #{injected_type}" if results.empty?
-
-          output = ["# Classes Injecting: #{injected_type}", ""]
-          output << "Found #{results.size} injection point(s):"
-          output << ""
-
-          # Group by class name, then by injection type
-          results.group_by { |r| r['class_name'] }.each do |class_name, injections|
-            output << "## #{class_name}"
-            output << "- Extension: #{injections.first['extension']}" if injections.first['extension']
-            output << "- File: #{injections.first['file_path']}" if injections.first['file_path']
-            output << ""
-
-            # Group by injection type within each class
-            injections.group_by { |i| i['injection_type'] }.each do |injection_type, deps|
-              output << "### #{injection_type} Injection (#{deps.size})"
-
-              deps.each do |dep|
-                if dep['xml_dep_type']
-                  output << "  - #{dep['dependency_name']} → #{dep['dependency_type']} (#{dep['xml_dep_type']})"
-                else
-                  output << "  - #{dep['dependency_name']} (#{dep['annotations']})"
-                end
-              end
-
-              output << ""
-            end
-          end
-
-          output.join("\n")
         end
 
         def error_response(message)

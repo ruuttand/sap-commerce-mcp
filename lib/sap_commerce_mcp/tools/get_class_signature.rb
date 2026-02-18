@@ -27,8 +27,9 @@ module SapCommerceMcp
         - Finding classes by name pattern (use SearchClasses instead)
 
         Accepts simple names (e.g., "ProductModel") or fully qualified names. Returns error with candidates if ambiguous.
-        Returns: parent_class, interfaces array, methods with signatures, fields with types, class annotations.
         Set include_inherited=true to recursively fetch parent class methods (up to 5 levels).
+
+        RETURNS JSON: { class: {...class_info}, methods: [{name, signature, return_type, annotations}], fields: [{name, type, annotations}], annotations: [{annotation_name, annotation_value}] }
       DESC
 
       input_schema(

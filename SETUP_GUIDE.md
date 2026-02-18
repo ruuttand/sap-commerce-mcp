@@ -9,6 +9,7 @@ This is a complete MCP (Model Context Protocol) server for SAP Commerce Cloud pr
 - **Ruby 3.0+** (check with `ruby --version`)
 - **SAP Commerce Cloud project** (hybris directory structure)
 - **Claude Code** or compatible MCP client
+- **Optional:** C compiler (for tree-sitter grammar - recommended for better parsing)
 
 ---
 
@@ -60,6 +61,43 @@ ruby -c bin/sap-commerce-mcp
 
 **Expected:** `Syntax OK`
 
+### Step 5: Optional - Install Tree-Sitter Parser (Recommended)
+
+Tree-sitter provides better parsing for:
+- Generic types: `Map<String, List<ProductModel>>`
+- Inner/nested classes with unlimited depth
+- Complex multi-line annotations
+- Better handling of edge cases
+
+**Installation (5-10 minutes):**
+
+```bash
+# 1. Install tree-sitter gem dependency
+# (Already done if bundle install succeeded)
+
+# 2. Clone and compile Java grammar
+cd /tmp
+git clone https://github.com/tree-sitter/tree-sitter-java
+cd tree-sitter-java
+
+# 3. Compile grammar (macOS/Linux)
+cc -shared -o libtree-sitter-java.dylib -I src src/parser.c src/scanner.c -fPIC
+
+# 4. Install grammar
+mkdir -p ~/.sap-commerce-mcp/grammars
+cp libtree-sitter-java.dylib ~/.sap-commerce-mcp/grammars/
+
+# 5. Verify installation
+ls -l ~/.sap-commerce-mcp/grammars/libtree-sitter-java.dylib
+```
+
+**Linux users:** Replace `.dylib` with `.so` in the commands above.
+
+**Skip this step if:**
+- You don't need generic type information
+- You don't use inner classes
+- You prefer simpler setup (regex parser works fine)
+
 ---
 
 ## Phase 2: Build Initial Index (10-15 minutes)
@@ -70,29 +108,40 @@ ruby -c bin/sap-commerce-mcp
 cd /path/to/your/hybris
 ```
 
-### Step 2: Run Initial Index
+### Step 2: Test the Server (Optional Manual Run)
+
+This step is optional - you can skip to Phase 3 and let Claude Code build the index automatically.
+
+**If you want to test manually:**
 
 ```bash
-/path/to/sap-commerce-mcp-sdk/bin/sap-commerce-mcp /path/to/your/hybris
+# Method 1: With path argument (standard mode)
+/path/to/sap-commerce-mcp/bin/sap-commerce-mcp /path/to/your/hybris
+
+# Method 2: With environment variable
+export SAP_COMMERCE_PROJECT_PATH="/path/to/your/hybris"
+/path/to/sap-commerce-mcp/bin/sap-commerce-mcp
+
+# Method 3: From project directory
+cd /path/to/your/hybris && /path/to/sap-commerce-mcp/bin/sap-commerce-mcp
+
+# Enhanced mode (tree-sitter parser - with any method above)
+SAP_MCP_USE_TREE_SITTER=true /path/to/sap-commerce-mcp/bin/sap-commerce-mcp /path/to/your/hybris
 ```
 
-**Or create an alias:**
-```bash
-alias sap-mcp="/path/to/sap-commerce-mcp-sdk/bin/sap-commerce-mcp"
-sap-mcp /path/to/hybris
-```
+**Note:** Once you configure the MCP config (Phase 3), Claude Code will automatically handle environment variables. You won't need to pass them manually.
 
-**What happens:**
-1. Server starts
-2. Checks for existing index
+**What happens when Claude Code first uses the server:**
+1. Claude Code starts the server with your configured environment variables
+2. Server checks for existing index
 3. If none exists, builds index automatically
 4. Scans all extensions
-5. Parses Java files
+5. Parses Java files (using tree-sitter if `SAP_MCP_USE_TREE_SITTER=true` is in config)
 6. Extracts classes, methods, annotations
 7. Stores in SQLite (~/.sap-commerce-mcp/indexes/)
 8. Server ready for MCP requests
 
-**Expected output:**
+**You'll see this in Claude Code's logs (not your terminal):**
 ```
 Starting SAP Commerce MCP Server...
 Project: /Users/andree/projects/hybris
@@ -103,7 +152,7 @@ Indexing files...
 Index built: 8547 classes, 52341 methods
 Index location: /Users/andree/.sap-commerce-mcp/indexes/abc123def.db
 Audit logs: /Users/andree/.sap-commerce-mcp/logs
-Registered 8 tools
+Registered 9 tools
 Ready to receive MCP requests via stdio...
 ```
 
@@ -123,29 +172,76 @@ Ready to receive MCP requests via stdio...
 
 ### Step 1: Add Configuration to MCP
 
-```
-claude mcp add sap-commerce --scope user -- /full/path/sap-commerce-mcp/bin/sap-commerce-mcp /full/path/hybris
-```
+Edit `~/.config/claude/mcp.json` to add the server configuration:
 
-**Important:**
-- Use **full absolute paths** (not `~` or relative paths)
-- On macOS/Linux: `/full/path/sap-commerce-mcp/bin/sap-commerce-mcp`
-- On Windows: `C:\full\path\sap-commerce-mcp\bin\sap-commerce-mcp`
+**Option A: Enhanced mode (tree-sitter parser - recommended if you installed grammar):**
 
-configuration is added to ~/.claude.json
-
-**Example:**
 ```json
 {
   "mcpServers": {
     "sap-commerce": {
       "command": "/full/path/sap-commerce-mcp/bin/sap-commerce-mcp",
       "args": ["/full/path/hybris"],
-      "env": {}
+      "env": {
+        "SAP_MCP_USE_TREE_SITTER": "true"
+      }
     }
   }
 }
 ```
+
+**Option B: Standard mode (regex parser):**
+
+```json
+{
+  "mcpServers": {
+    "sap-commerce": {
+      "command": "/full/path/sap-commerce-mcp/bin/sap-commerce-mcp",
+      "args": ["/full/path/hybris"]
+    }
+  }
+}
+```
+
+**Option C: Using environment variable for project path:**
+
+```json
+{
+  "mcpServers": {
+    "sap-commerce": {
+      "command": "/full/path/sap-commerce-mcp/bin/sap-commerce-mcp",
+      "args": [],
+      "env": {
+        "SAP_COMMERCE_PROJECT_PATH": "/full/path/hybris"
+      }
+    }
+  }
+}
+```
+
+**Option D: Environment variable + tree-sitter:**
+
+```json
+{
+  "mcpServers": {
+    "sap-commerce": {
+      "command": "/full/path/sap-commerce-mcp/bin/sap-commerce-mcp",
+      "args": [],
+      "env": {
+        "SAP_COMMERCE_PROJECT_PATH": "/full/path/hybris",
+        "SAP_MCP_USE_TREE_SITTER": "true"
+      }
+    }
+  }
+}
+```
+
+**Important:**
+- Use **full absolute paths** (not `~` or relative paths)
+- On macOS/Linux: `/full/path/sap-commerce-mcp/bin/sap-commerce-mcp`
+- On Windows: `C:\full\path\sap-commerce-mcp\bin\sap-commerce-mcp`
+- **The environment variable in the config is all you need** - Claude Code will pass it to the server automatically
+- You don't need to set it manually when running via Claude Code
 
 ### Step 4: Restart Claude Code
 
@@ -436,29 +532,80 @@ du -h ~/.sap-commerce-mcp/indexes/
 sqlite3 ~/.sap-commerce-mcp/indexes/*.db "VACUUM;"
 ```
 
+### Tree-Sitter Parser Issues
+
+**Error:** `Tree-sitter Java grammar not found`
+
+```bash
+# Check grammar exists
+ls -l ~/.sap-commerce-mcp/grammars/libtree-sitter-java.dylib
+
+# If missing, install grammar (see Phase 1, Step 5)
+# Or disable tree-sitter by removing env var from config
+```
+
+**Error:** `Could not load shared library`
+
+```bash
+# Verify correct extension for your platform
+# macOS: .dylib
+# Linux: .so
+# Windows: .dll
+
+# Recompile if needed
+cd /tmp/tree-sitter-java
+cc -shared -o libtree-sitter-java.dylib -I src src/parser.c src/scanner.c -fPIC
+cp libtree-sitter-java.dylib ~/.sap-commerce-mcp/grammars/
+```
+
+**Fallback to regex parser:**
+
+Remove `SAP_MCP_USE_TREE_SITTER` from your config:
+```json
+{
+  "mcpServers": {
+    "sap-commerce": {
+      "env": {}  // Remove tree-sitter setting
+    }
+  }
+}
+```
+
 ---
 
 ## Project Structure
 
 ```
-sap-commerce-mcp-sdk/
+sap-commerce-mcp/
 ├── bin/
 │   └── sap-commerce-mcp          # Main executable (uses SDK)
 ├── lib/
 │   └── sap_commerce_mcp/
-│       ├── tools/                # 8 MCP tools (SDK-based)
+│       ├── tools/                # 9 MCP tools (SDK-based)
 │       │   ├── search_classes.rb
 │       │   ├── get_class_signature.rb
-│       │   └── ... (6 more)
+│       │   ├── find_implementations.rb
+│       │   ├── find_usages.rb
+│       │   ├── find_injected_dependencies.rb
+│       │   ├── search_annotations.rb
+│       │   ├── get_spring_beans.rb
+│       │   ├── rebuild_index.rb
+│       │   └── get_index_stats.rb
 │       ├── indexer.rb            # SQLite indexing
-│       ├── parser/               # Java parsing
-│       │   ├── java_parser.rb
+│       ├── parser/               # Java parsing (dual-mode)
+│       │   ├── java_parser.rb    # Regex-based (default)
+│       │   ├── tree_sitter_java_parser.rb  # AST-based (opt-in)
+│       │   ├── tree_sitter/
+│       │   │   └── grammar_loader.rb
 │       │   └── sap_commerce_parser.rb
 │       ├── search/               # Query processing
 │       │   ├── query_processor.rb
 │       │   └── result_formatter.rb
 │       └── audit/                # Logging
 │           └── logger.rb
+├── test/
+│   ├── fixtures/                 # Test Java files
+│   └── unit/                     # Unit tests
 ├── Gemfile                       # With official MCP SDK
 └── README.md
 ```
@@ -494,25 +641,50 @@ tail -f ~/.sap-commerce-mcp/logs/audit-*.log | jq .
 
 ## Performance Expectations
 
-- **Indexing**: 300-500 classes/second
+- **Indexing**: 300-500 classes/second (both parsers)
 - **Search**: < 100ms typical
-- **Index Size**: ~50MB for 10K classes
+- **Index Size**: ~50MB for 10K classes (~60MB with tree-sitter)
 - **Memory**: ~100MB during operation
 - **Token Savings**: 60-80% on discovery
+
+### Parser Comparison
+
+| Feature | Regex Parser | Tree-Sitter Parser |
+|---------|--------------|-------------------|
+| **Speed** | Fast | Fast (similar) |
+| **Generic types** | Partial | ✅ Full (`Map<String, List<Model>>`) |
+| **Inner classes** | ❌ Not detected | ✅ All levels with parent links |
+| **Annotations** | ❌ Single line | ✅ Multi-line with parameters |
+| **Edge cases** | ⚠️ May fail | ✅ AST-based, robust |
+| **Setup** | None | Requires grammar compilation |
+| **Default** | Yes | Opt-in via env var |
+
+**Recommendation:** Use tree-sitter if you work with:
+- Complex generic types
+- Inner/nested classes
+- Multi-line annotations
+- Need robust parsing for all edge cases
+
+**Stick with regex if:**
+- Simple project structure
+- Don't need advanced features
+- Prefer zero additional setup
 
 ---
 
 ## Next Steps
 
 1. ✅ Install dependencies
-2. ✅ Build index
-3. ✅ Configure Claude Code
-4. ✅ Test with simple queries
-5. 🎯 Use in daily development:
+2. ✅ Optional: Install tree-sitter parser (recommended)
+3. ✅ Build index
+4. ✅ Configure Claude Code (with or without tree-sitter)
+5. ✅ Test with simple queries
+6. 🎯 Use in daily development:
    - Finding core hybris patterns
    - Extending services/facades
    - Reviewing PRs
    - Creating new features
+   - Analyzing dependency graphs
 
 ---
 
@@ -546,16 +718,28 @@ rm -rf ~/.sap-commerce-mcp/
 
 ### What Stayed the Same (Business Logic)
 - ✅ SQLite indexer
-- ✅ Java parser
 - ✅ Search query processor
 - ✅ Audit logger
-- ✅ All 8 tools functionality
+- ✅ All 9 tools functionality
+
+### Latest Enhancements
+- ✅ Dual-mode Java parser (regex + tree-sitter)
+- ✅ Generic type extraction (tree-sitter)
+- ✅ Inner/nested class support (tree-sitter)
+- ✅ Complex annotation parsing (tree-sitter)
+- ✅ Enhanced schema (generic_signature, is_inner_class, etc.)
 
 ### Benefits of SDK
 - ✅ Proper protocol compliance
 - ✅ Better error handling
 - ✅ Future-proof updates
 - ✅ Less code to maintain
+
+### Benefits of Tree-Sitter (Optional)
+- ✅ Full generic type preservation
+- ✅ Unlimited inner class depth
+- ✅ Multi-line annotation support
+- ✅ Robust AST-based parsing
 
 ---
 
