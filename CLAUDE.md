@@ -281,6 +281,7 @@ Find Spring dependency injection relationships across all injection types:
 - **Constructor injection**: @Autowired on constructors + parameters
 - **Method injection**: @Autowired on setter methods
 - **Spring XML**: property/constructor-arg refs in Spring XML files
+- **Convention Setter**: unannotated field + matching `setXxx(Type)` void setter, wired via Spring XML (pre-annotation style common in older SAP Commerce extensions)
 
 Two modes:
 - Find all dependencies OF a class: "What services does DefaultCheckoutFacade depend on?"
@@ -288,11 +289,11 @@ Two modes:
 
 Features:
 - Filter by annotation type (@Autowired, @Resource, @Inject)
-- Shows injection type (Field/Constructor/Method/Spring XML)
+- Shows injection type (Field/Constructor/Method/Spring XML/Convention Setter)
 - Includes annotations, qualifiers, and XML configuration
-- Complete dependency graph visibility
+- Complete dependency graph visibility — including pre-annotation Spring wiring
 
-This tool is critical for understanding the complete dependency graph in SAP Commerce projects, which extensively use all injection patterns.
+This tool is critical for understanding the complete dependency graph in SAP Commerce projects, which extensively use all injection patterns. The Convention Setter path requires no reindex — it queries the existing `fields` and `methods` tables.
 
 ### 8. RebuildIndex
 Force rebuild of the code index (useful after major codebase changes).

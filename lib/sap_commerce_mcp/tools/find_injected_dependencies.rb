@@ -19,6 +19,12 @@ module SapCommerceMcp
         - Constructor injection (@Autowired on constructor)
         - Method injection (@Autowired on methods)
         - Spring XML property/constructor-arg refs
+        - Convention Setter injection (unannotated field + matching setXxx(Type) void setter, wired via Spring XML)
+
+        NOTES:
+        - Convention Setter results are suppressed when the annotation filter is used (those fields carry no annotations by definition)
+        - Convention Setter results always have annotations=null — wiring is in Spring XML, not in Java source
+        - Older SAP Commerce extensions (commerceservices, warehouse, orderprocessing) commonly use Convention Setter style throughout; if a class returns only Convention Setter results, it is fully XML-wired and has no annotation-based injection at all
 
         USE: "What services does DefaultCheckoutFacade use?", "What injects CheckoutService?", "Show dependencies of X"
         NOT: imports→FindUsages | bean lookup→GetSpringBeans | subclasses→FindImplementations
@@ -26,6 +32,7 @@ module SapCommerceMcp
         RETURNS JSON:
         - Mode 1 (class_name): { class_name, result_count, dependencies: [{dependency_name, dependency_type, injection_type, annotations, class_name, extension}] }
         - Mode 2 (injected_type): { injected_type, result_count, injections: [{class_name, simple_name, extension, file_path, dependency_name, dependency_type, injection_type, annotations}] }
+        - injection_type values: "Field", "Constructor", "Method", "Spring XML", "Convention Setter"
       DESC
 
       input_schema(
@@ -110,7 +117,8 @@ module SapCommerceMcp
             field_injections: find_field_injections(db, class_name, annotation_filter),
             constructor_injections: find_constructor_injections(db, class_name, annotation_filter),
             method_injections: find_method_injections(db, class_name, annotation_filter),
-            xml_dependencies: find_xml_dependencies(db, class_name)
+            xml_dependencies: find_xml_dependencies(db, class_name),
+            convention_injections: annotation_filter ? [] : find_convention_field_injections(db, class_name)
           }
 
           # Flatten all results
@@ -119,6 +127,7 @@ module SapCommerceMcp
           all_results.concat(results[:constructor_injections].map { |r| r.merge('injection_type' => 'Constructor') })
           all_results.concat(results[:method_injections].map { |r| r.merge('injection_type' => 'Method') })
           all_results.concat(results[:xml_dependencies].map { |r| r.merge('injection_type' => 'Spring XML') })
+          all_results.concat(results[:convention_injections].map { |r| r.merge('injection_type' => 'Convention Setter') })
 
           all_results.take(limit)
         end
@@ -246,6 +255,7 @@ module SapCommerceMcp
           constructor_results = find_constructor_injections_of_type(db, injected_type, annotation_filter)
           method_results = find_method_injections_of_type(db, injected_type, annotation_filter)
           xml_results = find_xml_injections_of_type(db, injected_type)
+          convention_results = annotation_filter ? [] : find_convention_setter_injections_of_type(db, injected_type)
 
           # Flatten all results
           all_results = []
@@ -253,6 +263,7 @@ module SapCommerceMcp
           all_results.concat(constructor_results.map { |r| r.merge('injection_type' => 'Constructor') })
           all_results.concat(method_results.map { |r| r.merge('injection_type' => 'Method') })
           all_results.concat(xml_results.map { |r| r.merge('injection_type' => 'Spring XML') })
+          all_results.concat(convention_results.map { |r| r.merge('injection_type' => 'Convention Setter') })
 
           all_results.take(limit)
         end
@@ -381,6 +392,62 @@ module SapCommerceMcp
           params = ["%#{injected_type}%", "%#{injected_type}%"]
 
           db.execute(query, params)
+        end
+
+        def find_convention_field_injections(db, class_name)
+          query = <<~SQL
+            SELECT
+              f.name as dependency_name,
+              f.type as dependency_type,
+              f.modifiers,
+              c.name as class_name,
+              c.extension,
+              NULL as annotations
+            FROM classes c
+            INNER JOIN fields f ON c.id = f.class_id
+            INNER JOIN methods m ON c.id = m.class_id
+            WHERE (c.name LIKE ? OR c.simple_name LIKE ?)
+              AND m.name = 'set' || UPPER(SUBSTR(f.name, 1, 1)) || SUBSTR(f.name, 2)
+              AND m.return_type = 'void'
+              AND (f.modifiers IS NULL OR (f.modifiers NOT LIKE '%static%' AND f.modifiers NOT LIKE '%final%'))
+              AND NOT EXISTS (
+                SELECT 1 FROM annotations a
+                WHERE a.target_type = 'field'
+                  AND a.target_id = f.id
+                  AND a.annotation_name IN ('Autowired', 'Resource', 'Inject')
+              )
+            GROUP BY f.id, f.name, f.type, c.name, c.extension
+          SQL
+          db.execute(query, ["%#{class_name}%", "%#{class_name}%"])
+        end
+
+        def find_convention_setter_injections_of_type(db, injected_type)
+          query = <<~SQL
+            SELECT
+              c.name as class_name,
+              c.simple_name,
+              c.extension,
+              c.file_path,
+              f.name as dependency_name,
+              f.type as dependency_type,
+              NULL as annotations
+            FROM classes c
+            INNER JOIN fields f ON c.id = f.class_id
+            INNER JOIN methods m ON c.id = m.class_id
+            WHERE (f.type LIKE ? OR f.type = ?)
+              AND m.name = 'set' || UPPER(SUBSTR(f.name, 1, 1)) || SUBSTR(f.name, 2)
+              AND m.return_type = 'void'
+              AND (f.modifiers IS NULL OR (f.modifiers NOT LIKE '%static%' AND f.modifiers NOT LIKE '%final%'))
+              AND NOT EXISTS (
+                SELECT 1 FROM annotations a
+                WHERE a.target_type = 'field'
+                  AND a.target_id = f.id
+                  AND a.annotation_name IN ('Autowired', 'Resource', 'Inject')
+              )
+            GROUP BY c.id, f.id, c.name, c.simple_name, c.extension, f.name, f.type
+            ORDER BY c.name
+          SQL
+          db.execute(query, ["%#{injected_type}%", injected_type])
         end
 
         def error_response(message)
