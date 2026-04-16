@@ -16,6 +16,16 @@ require_relative 'sap_commerce_mcp/audit/logger'
 
 # Conditionally load tree-sitter parser if gem is available
 begin
+  require 'pathname'
+  # Set TREE_SITTER_PARSERS before requiring tree_sitter gem, because the gem
+  # evaluates ENV_PARSERS at require-time as a frozen constant.
+  grammar_dir = File.expand_path('~/.sap-commerce-mcp/grammars')
+  existing = ENV['TREE_SITTER_PARSERS']
+  if existing
+    ENV['TREE_SITTER_PARSERS'] = "#{grammar_dir}:#{existing}" unless existing.include?(grammar_dir)
+  else
+    ENV['TREE_SITTER_PARSERS'] = grammar_dir
+  end
   require 'tree_sitter'
   require_relative 'sap_commerce_mcp/parser/tree_sitter/grammar_loader'
   require_relative 'sap_commerce_mcp/parser/tree_sitter_java_parser'
