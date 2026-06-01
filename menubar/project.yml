@@ -1,0 +1,38 @@
+name: SAPCommerceMCPManager
+options:
+  bundleIdPrefix: com.andree
+  deploymentTarget:
+    macOS: "13.0"
+  xcodeVersion: "15"
+targets:
+  SAPCommerceMCPManager:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/SAPCommerceMCPManager
+    postBuildScripts:
+      - script: |
+          RESOURCES_DIR="$TARGET_BUILD_DIR/$PRODUCT_NAME.app/Contents/Resources"
+          mkdir -p "$RESOURCES_DIR"
+          cp "$SRCROOT/Resources/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+          codesign --force --sign - "$TARGET_BUILD_DIR/$PRODUCT_NAME.app"
+        name: Copy App Icon and Re-sign
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleIconFile: AppIcon
+        LSUIElement: true
+        NSPrincipalClass: NSApplication
+        CFBundleName: SAP Commerce MCP
+        CFBundleDisplayName: SAP Commerce MCP
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+    entitlements:
+      path: SAPCommerceMCPManager.entitlements
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.andree.sap-commerce-mcp-manager
+      SWIFT_VERSION: "5.9"
+      MACOSX_DEPLOYMENT_TARGET: "13.0"
+      CODE_SIGN_STYLE: Automatic
+      DEVELOPMENT_TEAM: ""
+      ENABLE_HARDENED_RUNTIME: NO

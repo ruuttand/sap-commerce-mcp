@@ -32,6 +32,16 @@ claude mcp add sap-commerce --scope user --env SAP_COMMERCE_PROJECT_PATH=/path/t
 
 See **[SETUP_GUIDE.md](SETUP_GUIDE.md)** for complete instructions.
 
+---
+
+## 🖥️ macOS Menu Bar App
+
+A native macOS menu bar app for managing the MCP server without touching the terminal — switch projects, rebuild the index, and monitor stats from the menu bar.
+
+See **[menubar/README.md](menubar/README.md)** for build and setup instructions.
+
+---
+
 ## ✨ Features
 
 - ⚡ **60-80% Token Reduction** - Find code without loading files

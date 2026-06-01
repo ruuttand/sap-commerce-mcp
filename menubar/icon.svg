@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Background: deep indigo rounded square -->
+  <rect width="1024" height="1024" rx="230" fill="#1A2E55"/>
+
+  <!-- Grid lines (index / database feel) -->
+  <g opacity="0.18" stroke="#FFFFFF" stroke-width="22">
+    <!-- Horizontal -->
+    <line x1="130" y1="310" x2="640" y2="310"/>
+    <line x1="130" y1="430" x2="640" y2="430"/>
+    <line x1="130" y1="550" x2="560" y2="550"/>
+    <line x1="130" y1="670" x2="480" y2="670"/>
+    <!-- Vertical divider -->
+    <line x1="240" y1="260" x2="240" y2="720"/>
+  </g>
+
+  <!-- Row dots (record indicators) -->
+  <g fill="#4A9EFF" opacity="0.55">
+    <circle cx="177" cy="310" r="18"/>
+    <circle cx="177" cy="430" r="18"/>
+    <circle cx="177" cy="550" r="18"/>
+    <circle cx="177" cy="670" r="18"/>
+  </g>
+
+  <!-- Horizontal text bars (representing code lines) -->
+  <g fill="#FFFFFF" opacity="0.22" rx="8">
+    <rect x="272" y="292" width="240" height="36" rx="8"/>
+    <rect x="272" y="412" width="180" height="36" rx="8"/>
+    <rect x="272" y="532" width="210" height="36" rx="8"/>
+    <rect x="272" y="652" width="140" height="36" rx="8"/>
+  </g>
+
+  <!-- Magnifying glass handle -->
+  <line x1="635" y1="640" x2="870" y2="875"
+        stroke="#F0AB00" stroke-width="88" stroke-linecap="round"/>
+
+  <!-- Magnifying glass circle (shadow/depth) -->
+  <circle cx="470" cy="470" r="232" fill="none"
+          stroke="#000000" stroke-width="78" opacity="0.25"/>
+
+  <!-- Magnifying glass circle (main ring) -->
+  <circle cx="470" cy="470" r="232" fill="#1A2E55"
+          stroke="#FFFFFF" stroke-width="68"/>
+
+  <!-- Inner lens gloss -->
+  <circle cx="470" cy="470" r="190" fill="#2040AA" opacity="0.6"/>
+
+  <!-- SAP-style "S" lettermark inside lens -->
+  <text x="470" y="530"
+        font-family="SF Pro Display, Helvetica Neue, Arial, sans-serif"
+        font-size="200"
+        font-weight="800"
+        fill="#FFFFFF"
+        text-anchor="middle"
+        letter-spacing="-4">S</text>
+
+  <!-- Orange accent spark (top-right of lens) -->
+  <circle cx="660" cy="278" r="58" fill="#F0AB00"/>
+  <circle cx="660" cy="278" r="38" fill="#FFD040"/>
+</svg>
