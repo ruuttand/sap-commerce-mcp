@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22">
+  <!-- Template image: solid black, macOS inverts to white in dark menu bar -->
+  <!-- Magnifying glass -->
+  <circle cx="9" cy="9" r="6" fill="none" stroke="#000000" stroke-width="2"/>
+  <!-- Handle -->
+  <line x1="13.2" y1="13.2" x2="19" y2="19" stroke="#000000" stroke-width="2.2" stroke-linecap="round"/>
+  <!-- Small "S" inside lens -->
+  <text x="9" y="12.5"
+        font-family="Helvetica Neue, Arial, sans-serif"
+        font-size="7.5"
+        font-weight="800"
+        fill="#000000"
+        text-anchor="middle">S</text>
+</svg>

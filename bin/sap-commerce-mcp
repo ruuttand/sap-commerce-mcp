@@ -4,8 +4,14 @@
 require 'bundler/setup'
 require_relative '../lib/sap_commerce_mcp'
 
-# Get project path from command line, environment variable, or current directory
-project_path = ARGV[0] || ENV['SAP_COMMERCE_PROJECT_PATH'] || Dir.pwd
+# --rebuild-only: build index then exit (used by the menu bar app)
+rebuild_only = ARGV.delete('--rebuild-only')
+
+# Get project path from command line, environment variable, active-project file, or current directory
+project_path = ARGV[0] ||
+               ENV['SAP_COMMERCE_PROJECT_PATH'] ||
+               (File.read(File.expand_path('~/.sap-commerce-mcp/active-project')).strip rescue nil) ||
+               Dir.pwd
 project_path = File.expand_path(project_path)
 
 warn "Starting SAP Commerce MCP Server..."
@@ -32,19 +38,30 @@ end
 indexer = SapCommerceMcp::Indexer.new(project_path, use_tree_sitter: use_tree_sitter)
 audit_logger = SapCommerceMcp::Audit::Logger.new(project_path)
 
-# Build index if it doesn't exist
-if indexer.index_exists?
-  # Ensure database is opened for existing index
-  indexer.ensure_db_open
-  warn "Using existing index (last indexed: #{indexer.last_indexed_time&.strftime('%Y-%m-%d %H:%M:%S')})"
-else
-  warn "No index found. Building initial index..."
-  stats = indexer.build_index
-  audit_logger.log_indexing(stats)
-  warn "Index built: #{stats[:classes_count]} classes, #{stats[:methods_count]} methods"
+# Build index if it doesn't exist (skip initial build when rebuild_only — we'll do it below)
+if !rebuild_only
+  if indexer.index_exists?
+    indexer.ensure_db_open
+    warn "Using existing index (last indexed: #{indexer.last_indexed_time&.strftime('%Y-%m-%d %H:%M:%S')})"
+  else
+    warn "No index found. Building initial index..."
+    stats = indexer.build_index
+    audit_logger.log_indexing(stats)
+    warn "Index built: #{stats[:classes_count]} classes, #{stats[:methods_count]} methods"
+  end
 end
 
 warn "Index location: #{indexer.db_path}"
+
+if rebuild_only
+  warn "Rebuilding index..."
+  stats = indexer.build_index
+  audit_logger.log_indexing(stats)
+  warn "Index built: #{stats[:classes_count]} classes in #{stats[:duration_seconds].round(1)}s"
+  indexer.close
+  exit 0
+end
+
 warn "Audit logs: #{audit_logger.log_path}"
 
 # Configure server context that will be passed to all tools
